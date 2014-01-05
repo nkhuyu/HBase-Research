@@ -559,9 +559,11 @@
     <testResources>
       <testResource>
         <directory>src/test/resources</directory>
-        <excludes>
+        <!--
+		<excludes>
           <exclude>hbase-site.xml</exclude>
         </excludes>
+		-->
       </testResource>
     </testResources>
 

@@ -21,6 +21,7 @@
  * limitations under the License.
  */
 -->
+<!--
 <configuration>
   <property>
     <name>hbase.regionserver.msginterval</name>
@@ -138,4 +139,225 @@
     <name>hbase.ipc.client.fallback-to-simple-auth-allowed</name>
     <value>true</value>
   </property>
+</configuration>
+-->
+
+<configuration>
+    <!-- <property>
+		<name>fs.default.name</name>
+		<value>hdfs://localhost:9000</value>
+	</property> -->
+
+	<!-- change it if necessary -->
+	<property>
+		<name>my.test.dir</name>
+		<value>my-test-dir</value>
+	</property>
+
+	<!-- zookeeper properties -->
+	<!-- ************************************************* -->
+	<property>
+		<name>hbase.zookeeper.property.tickTime</name>
+		<value>2000</value>
+		<description>
+			The number of milliseconds of each tick
+		</description>
+	</property>
+
+	<property>
+		<name>hbase.zookeeper.property.initLimit</name>
+		<value>10</value>
+		<description>
+			The number of ticks that the initial synchronization
+			phase can take
+		</description>
+	</property>
+
+	<property>
+		<name>hbase.zookeeper.property.syncLimit</name>
+		<value>5</value>
+		<description>
+			The number of ticks that can pass between sending a
+			request and getting an acknowledgement
+		</description>
+	</property>
+
+	<property>
+		<name>hbase.zookeeper.property.dataDir</name>
+		<value>${my.test.dir}/zookeeper</value>
+		<description>
+			the directory where the snapshot is stored.
+		</description>
+	</property>
+
+	<property>
+		<name>hbase.zookeeper.property.clientPort</name>
+		<value>2181</value>
+		<description>
+			the port at which the clients will connect
+		</description>
+	</property>
+
+	<!-- hbase properties -->
+	<!-- ************************************************* -->
+	<property>
+		<name>hbase.tmp.dir</name>
+		<value>${my.test.dir}</value>
+	</property>
+
+	<property>
+		<name>hbase.rootdir</name>
+		<value>${my.test.dir}/hbase</value>
+		<!-- <value>file:///${my.test.dir}/hbase</value> -->
+		<!-- <value>hdfs://localhost:9000/hbase</value> -->
+	</property>
+
+	<property>
+		<name>hbase.defaults.for.version.skip</name>
+		<value>true</value>
+	</property>
+
+	<property>
+		<name>hbase.regionserver.maxlogs</name>
+		<value>-1</value>
+	</property>
+	<!-- <property> <name>hbase.defaults.for.version</name> <value>0.94.0</value> 
+		</property> -->
+	<property>
+		<name>hbase.cluster.distributed</name>
+		<value>true</value>
+	</property>
+
+	<property>
+		<name>hbase.rpc.timeout</name>
+		<value>300000000</value>
+	</property>
+
+	<property>
+		<name>zookeeper.session.timeout</name>
+		<value>120000</value>
+	</property>
+
+	<!-- <property> <name>hbase.regionserver.dns.interface</name> <value>127.0.0.1</value> 
+		</property> <property> <name>hbase.regionserver.dns.nameserver</name> <value>127.0.0.1</value> 
+		</property> -->
+
+	<!-- <property> <name>hbase.master.wait.on.regionservers.timeout</name> 
+		<value>1200000000</value> </property> -->
+
+	<!-- <property> <name>hbase.master.assignment.timeoutmonitor.period</name> 
+		<value>-1</value> </property> -->
+
+	<property>
+		<name>hbase.master.assignment.timeoutmonitor.period</name>
+		<value>3000000</value>
+	</property>
+
+	<property>
+		<name>hbase.master.assignment.timeoutmonitor.timeout</name>
+		<value>300000000</value>
+	</property>
+
+	<property>
+		<name>hbase.client.retries.number</name>
+		<value>2</value>
+	</property>
+
+	<property>
+		<name>hbase.ipc.client.tcpnodelay</name>
+		<value>true</value>
+	</property>
+
+	<property>
+		<name>hbase.client.pause</name>
+		<value>100</value>
+	</property>
+
+	<property>
+		<name>hbase.zookeeper.quorum</name>
+		<value>127.0.0.1</value>
+	</property>
+
+	<property>
+		<name>hbase.replication</name>
+		<value>false</value>
+	</property>
+
+	<property>
+		<name>hbase.hstore.compaction.min</name>
+		<value>2</value>
+	</property>
+
+	<property>
+		<name>hbase.rs.cacheblocksonwrite</name>
+		<value>true</value>
+	</property>
+
+	<!-- <property> <name>hfile.format.version</name> <value>2</value> </property> -->
+
+	<property>
+		<name>hbase.balancer.period</name>
+		<value>4800000</value>
+	</property>
+
+	<property>
+		<name>hbase.master.distributed.log.splitting</name>
+		<value>false</value>
+	</property>
+<!-- 
+	<property>
+		<name>hbase.master.handler.count</name>
+		<value>2</value>
+	</property>
+
+	<property>
+		<name>ipc.server.read.threadpool.size</name>
+		<value>2</value>
+	</property>
+
+	<property>
+		<name>hbase.regionserver.handler.count</name>
+		<value>2</value>
+	</property>
+
+	<property>
+		<name>hbase.regionserver.metahandler.count</name>
+		<value>2</value>
+	</property> -->
+<!-- 
+	<property>
+		<name>hbase.hregion.memstore.flush.size</name>
+		<value>102400</value>
+	</property>
+ -->
+	<property>
+		<name>hbase.hregion.memstore.block.multiplier</name>
+		<value>4</value>
+	</property>
+
+	<property>
+		<name>hbase.hstore.compaction.min</name>
+		<value>2</value>
+	</property>
+
+	<property>
+		<name>hbase.hstore.blockingStoreFiles</name>
+		<value>3</value>
+	</property>
+
+	<property>
+		<name>hbase.hstore.blockingWaitTime</name>
+		<value>2000</value>
+	</property>
+
+	<property>
+		<name>hbase.server.thread.wakefrequency</name>
+		<value>2000</value>
+	</property>
+
+	<property>
+		<name>hbase.regionserver.lease.period</name>
+		<value>6000000</value>
+	</property>
+
 </configuration>
