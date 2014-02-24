@@ -21,15 +21,13 @@ package my.test.start;
 
 import java.io.File;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseConfiguration;
+import my.test.TestBase;
+
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.master.HMaster;
 import org.apache.hadoop.hbase.zookeeper.MiniZooKeeperCluster;
 
 public class HMasterStarter {
-    static Configuration conf = HBaseConfiguration.create();
-
     public static void deleteRecursive(File[] files) {
         if (files == null)
             return;
@@ -42,7 +40,7 @@ public class HMasterStarter {
     }
 
     public static void main(String[] args) throws Exception {
-        File f = new File(conf.get("my.test.dir"));
+        File f = TestBase.getTestDir();
         //删除临时测试目录
         deleteRecursive(f.listFiles());
 
@@ -55,8 +53,8 @@ public class HMasterStarter {
         public void run() {
             MiniZooKeeperCluster zooKeeperCluster = new MiniZooKeeperCluster();
 
-            File zkDataPath = new File(conf.get(HConstants.ZOOKEEPER_DATA_DIR));
-            int zkClientPort = conf.getInt(HConstants.ZOOKEEPER_CLIENT_PORT, 2181);
+            File zkDataPath = new File(TestBase.sharedConf.get(HConstants.ZOOKEEPER_DATA_DIR));
+            int zkClientPort = TestBase.sharedConf.getInt(HConstants.ZOOKEEPER_CLIENT_PORT, 2181);
             zooKeeperCluster.setDefaultClientPort(zkClientPort);
             try {
                 zooKeeperCluster.startup(zkDataPath);

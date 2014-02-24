@@ -101,7 +101,6 @@ public class AppendTest extends TestBase {
             try {
                 System.out.println(t.get(get));
             } catch (IOException e) {
-                // TODO Auto-generated catch block
                 e.printStackTrace();
             }
         }
@@ -117,7 +116,6 @@ public class AppendTest extends TestBase {
             try {
                 t.put(put);
             } catch (IOException e) {
-                // TODO Auto-generated catch block
                 e.printStackTrace();
             }
         }

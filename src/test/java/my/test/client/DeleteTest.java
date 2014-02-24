@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.io.hfile.Compression;
 import org.apache.hadoop.hbase.util.Bytes;
 
 import my.test.TestBase;
+
 public class DeleteTest extends TestBase {
     public static void main(String[] args) throws Exception {
         new DeleteTest().run();
@@ -118,7 +119,6 @@ public class DeleteTest extends TestBase {
             get = new Get(toB("20003"));
             get.addColumn(cf, toB("q1"));
             p(t.get(get));
-
 
             //Delete不会删除列族，只会删除某行记录下面的字段，只是针对单行记录的操作
             //下面的代码就是删除rowKey=20007下面的所有字段
@@ -345,6 +345,7 @@ public class DeleteTest extends TestBase {
 
         } finally {
             //deleteTable(tableName);
+            admin.close();
         }
 
     }

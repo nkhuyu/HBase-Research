@@ -19,21 +19,33 @@
  */
 package my.test;
 
+import java.io.File;
 import java.io.IOException;
+import java.util.Map;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.HTablePool;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.io.hfile.Compression;
 import org.apache.hadoop.hbase.util.Bytes;
 
+@SuppressWarnings("deprecation")
 public class TestBase {
-    private static final Configuration sharedConf = HBaseConfiguration.create();
+
+    public static final Configuration sharedConf = HBaseConfiguration.create();
     private static final HTablePool tablePool = new HTablePool(sharedConf, sharedConf.getInt("hbase.htable.pool.max", 100));
+
+    public static File getTestDir() {
+        return new File(sharedConf.get("my.test.dir"));
+    }
 
     protected String tableName;
 
@@ -68,6 +80,7 @@ public class TestBase {
         if (!admin.tableExists(htd.getName())) {
             admin.createTable(htd);
         }
+        admin.close();
     }
 
     public void createTable(HColumnDescriptor... columnDescriptors) throws IOException {
@@ -83,6 +96,7 @@ public class TestBase {
         if (!admin.tableExists(htd.getName())) {
             admin.createTable(htd);
         }
+        admin.close();
     }
 
     public void createTable(byte[][] splitKeys, HColumnDescriptor... columnDescriptors) throws IOException {
@@ -98,15 +112,18 @@ public class TestBase {
         if (!admin.tableExists(htd.getName())) {
             admin.createTable(htd, splitKeys);
         }
+        admin.close();
     }
 
     public void deleteTable() throws IOException {
         HBaseAdmin admin = new HBaseAdmin(sharedConf);
         if (!admin.tableExists(tableName)) {
+            admin.close();
             return;
         }
         admin.disableTable(tableName);
         admin.deleteTable(tableName);
+        admin.close();
     }
 
     public byte[] toB(String str) {
@@ -128,4 +145,27 @@ public class TestBase {
     public void p() {
         System.out.println();
     }
+
+    public void regions() throws Exception {
+        regions(tableName);
+    }
+
+    public void regions(String tableName) throws Exception {
+        HTable t = new HTable(sharedConf, tableName);
+        for (Map.Entry<HRegionInfo, ServerName> e : t.getRegionLocations().entrySet()) {
+            HRegionInfo info = e.getKey();
+            p("info.getEncodedName()=" + info.getEncodedName());
+            ServerName server = e.getValue();
+
+            p("HRegionInfo = " + info.getRegionNameAsString());
+            p("ServerName = " + server);
+            p();
+
+            //String[] args = { "-b", "-e", "-m", "-v", "-r", info.getRegionNameAsString() };
+            //HFilePrettyPrinter prettyPrinter = new HFilePrettyPrinter();
+            //prettyPrinter.run(args);
+        }
+        t.close();
+    }
+
 }

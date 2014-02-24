@@ -27,7 +27,6 @@ import my.test.TestBase;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.client.ClientScanner;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -45,7 +44,7 @@ public class ScannerTest extends TestBase {
     public void run() throws Exception {
         conf = HBaseConfiguration.create();
         tableName = "ScannerTest";
-        byte[] cf = toB("cf");
+        //byte[] cf = toB("cf");
         createTable("cf");
 
         //createTable("cf", "cf2", "cf3");
@@ -111,6 +110,7 @@ public class ScannerTest extends TestBase {
 
         HTable t = new HTable(HBaseConfiguration.create(), TABLE_NAME);
         t.put(rows);
+        t.close();
     }
 
     public void run0() throws Exception {
@@ -169,7 +169,7 @@ public class ScannerTest extends TestBase {
         scan.setBatch(2);
         //scan.setBatch(5);
 
-        Delete d = new Delete(toB("2001"));
+        //Delete d = new Delete(toB("2001"));
         //d.deleteFamily(cf);
         //t.delete(d);
 
@@ -212,6 +212,7 @@ public class ScannerTest extends TestBase {
         //        } catch (Throwable e) {
         //            e.printStackTrace();
         //        }
+        t.close();
     }
 
     public void run3() throws Exception {

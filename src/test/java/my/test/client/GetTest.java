@@ -77,6 +77,8 @@ public class GetTest extends TestBase {
 
         get = new Get(toB("20000"));
         p(t.get(get));
+        
+        System.out.println(t.getTableDescriptor());
     }
 
 }

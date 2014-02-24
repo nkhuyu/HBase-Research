@@ -57,6 +57,7 @@ public class IncrementTest extends TestBase {
 
             get = new Get(toB("20000"));
             p(Bytes.toLong(t.get(get).getValue(cf, toB("q1"))));
+            t.close();
         } finally {
             //deleteTable(tableName);
         }

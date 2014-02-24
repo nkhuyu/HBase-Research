@@ -57,7 +57,7 @@ public class HTableTest extends TestBase {
 
         //deleteTable(tableName);
         byte[][] splitKeys = { toB("30000") };
-        createTable( splitKeys, hcds);
+        createTable(splitKeys, hcds);
 
         Configuration conf = HBaseConfiguration.create();
 
@@ -107,8 +107,10 @@ public class HTableTest extends TestBase {
             //			
             //			get = new Get(toB("20000"));
             //			p(Bytes.toLong(t.get(get).getValue(cf, toB("q1"))));
+            t.close();
         } finally {
             //deleteTable(tableName);
+            admin.close();
         }
 
     }
