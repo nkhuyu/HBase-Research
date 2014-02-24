@@ -35,7 +35,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.KeyComparator;
-import org.apache.hadoop.hbase.fs.HFileSystem;
 import org.apache.hadoop.hbase.io.hfile.HFile.Writer;
 import org.apache.hadoop.hbase.io.hfile.HFileBlock.BlockWritable;
 import org.apache.hadoop.hbase.regionserver.metrics.SchemaMetrics;
@@ -132,11 +131,13 @@ public class HFileWriterV2 extends AbstractHFileWriter {
       throw new IllegalStateException("finishInit called twice");
 
     // HFile filesystem-level (non-caching) block writer
+    //只有HFile V2才用得到
     fsBlockWriter = new HFileBlock.Writer(compressAlgo, blockEncoder,
         includeMemstoreTS, minorVersion, checksumType, bytesPerChecksum);
 
     // Data block index writer
     boolean cacheIndexesOnWrite = cacheConf.shouldCacheIndexesOnWrite();
+    //只有HFile V2才用得到
     dataBlockIndexWriter = new HFileBlockIndex.BlockIndexWriter(fsBlockWriter,
         cacheIndexesOnWrite ? cacheConf.getBlockCache(): null,
         cacheIndexesOnWrite ? name : null);
@@ -165,6 +166,7 @@ public class HFileWriterV2 extends AbstractHFileWriter {
    * @throws IOException
    */
   private void checkBlockBoundary() throws IOException {
+    //fsBlockWriter.blockSizeWritten()不包含数据块的头
     if (fsBlockWriter.blockSizeWritten() < blockSize)
       return;
 
@@ -188,9 +190,10 @@ public class HFileWriterV2 extends AbstractHFileWriter {
     // Update the last data block offset
     lastDataBlockOffset = outputStream.getPos();
 
-    fsBlockWriter.writeHeaderAndData(outputStream);
+    fsBlockWriter.writeHeaderAndData(outputStream); //把内存中的数据写到outputStream中
 
-    int onDiskSize = fsBlockWriter.getOnDiskSizeWithHeader();
+    int onDiskSize = fsBlockWriter.getOnDiskSizeWithHeader(); //可能压缩也可能没压缩，取决于是否起用压缩
+    //增加一个索引条目，包括: 此块的第一个Key、此块在文件中的相对位置，此块在文件中的大小
     dataBlockIndexWriter.addEntry(firstKeyInBlock, lastDataBlockOffset,
         onDiskSize);
     totalUncompressedBytes += fsBlockWriter.getUncompressedSizeWithHeader();
@@ -204,7 +207,8 @@ public class HFileWriterV2 extends AbstractHFileWriter {
 
   /** Gives inline block writers an opportunity to contribute blocks. */
   private void writeInlineBlocks(boolean closing) throws IOException {
-    for (InlineBlockWriter ibw : inlineBlockWriters) {
+    //对于BlockIndexWriter，写索引叶子节点块，直接跟在数据块后面，直接写往outputStream
+    for (InlineBlockWriter ibw : inlineBlockWriters) { //是否达到索引块的大小了或者是由close触发
       while (ibw.shouldWriteBlock(closing)) {
         long offset = outputStream.getPos();
         boolean cacheThisBlock = ibw.cacheOnWrite();
@@ -250,32 +254,33 @@ public class HFileWriterV2 extends AbstractHFileWriter {
     firstKeyInBlock = null;
   }
 
-  /**
-   * Add a meta block to the end of the file. Call before close(). Metadata
-   * blocks are expensive. Fill one with a bunch of serialized data rather than
-   * do a metadata block per metadata instance. If metadata is small, consider
-   * adding to file info using {@link #appendFileInfo(byte[], byte[])}
-   *
-   * @param metaBlockName
-   *          name of the block
-   * @param content
-   *          will call readFields to get data later (DO NOT REUSE)
-   */
-  @Override
-  public void appendMetaBlock(String metaBlockName, Writable content) {
-    byte[] key = Bytes.toBytes(metaBlockName);
-    int i;
-    for (i = 0; i < metaNames.size(); ++i) {
-      // stop when the current key is greater than our own
-      byte[] cur = metaNames.get(i);
-      if (Bytes.BYTES_RAWCOMPARATOR.compare(cur, 0, cur.length, key, 0,
-          key.length) > 0) {
-        break;
-      }
-    }
-    metaNames.add(i, key);
-    metaData.add(i, content);
-  }
+//  /**
+//   * Add a meta block to the end of the file. Call before close(). Metadata
+//   * blocks are expensive. Fill one with a bunch of serialized data rather than
+//   * do a metadata block per metadata instance. If metadata is small, consider
+//   * adding to file info using {@link #appendFileInfo(byte[], byte[])}
+//   *
+//   * @param metaBlockName
+//   *          name of the block
+//   * @param content
+//   *          will call readFields to get data later (DO NOT REUSE)
+//   */
+//  @Override
+//  public void appendMetaBlock(String metaBlockName, Writable content) { //与HFileWriterV1完全一样，应放到父类中
+//    byte[] key = Bytes.toBytes(metaBlockName);
+//    int i;
+//    //metaNames和metaData的东西都按metaNames中的元素进行升序排列
+//    for (i = 0; i < metaNames.size(); ++i) {
+//      // stop when the current key is greater than our own
+//      byte[] cur = metaNames.get(i);
+//      if (Bytes.BYTES_RAWCOMPARATOR.compare(cur, 0, cur.length, key, 0,
+//          key.length) > 0) {
+//        break;
+//      }
+//    }
+//    metaNames.add(i, key);
+//    metaData.add(i, content);
+//  }
 
   /**
    * Add key/value to file. Keys must be added in an order that agrees with the
@@ -328,7 +333,7 @@ public class HFileWriterV2 extends AbstractHFileWriter {
       checkBlockBoundary();
     }
 
-    if (!fsBlockWriter.isWriting())
+    if (!fsBlockWriter.isWriting()) //只有在第一次写时此if才会true，checkBlockBoundary()之后此if不会是true
       newBlock();
 
     // Write length of key and value and then actual key and value bytes.

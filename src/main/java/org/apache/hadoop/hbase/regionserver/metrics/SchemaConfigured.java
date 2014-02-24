@@ -112,6 +112,7 @@ public class SchemaConfigured implements HeapSize, SchemaAware {
         // This path starts with an '/'.
         --numPathLevels;
       }
+      //至少包含ROOT_DIR/TABLE_NAME/REGION_NAME/CF_NAME/HFILE，总共至少有5个目录或文件名
       if (numPathLevels < HFile.MIN_NUM_HFILE_PATH_LEVELS) {
         LOG.warn("Could not determine table and column family of the HFile "
             + "path " + path + ". Expecting at least "
@@ -119,7 +120,7 @@ public class SchemaConfigured implements HeapSize, SchemaAware {
         path = null;
       } else {
         cfName = splits[splits.length - 2];
-        if (cfName.equals(HRegion.REGION_TEMP_SUBDIR)) {
+        if (cfName.equals(HRegion.REGION_TEMP_SUBDIR)) { //不能用".tmp"当成列族名
           // This is probably a compaction or flush output file. We will set
           // the real CF name later.
           cfName = null;

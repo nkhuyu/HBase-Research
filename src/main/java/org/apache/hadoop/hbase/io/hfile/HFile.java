@@ -311,18 +311,26 @@ public class HFile {
    * we want to be able to swap writer implementations.
    */
   public static abstract class WriterFactory {
+    //总共12个字段，hfile v1不支持最后3个(checksumType、bytesPerChecksum、includeMVCCReadpoint)
     protected final Configuration conf;
     protected final CacheConfig cacheConf;
+
+    //调用者可以直接传个FSDataOutputStream进来，hbase不负责关闭它，
+    //或者直接提供FileSystem和Path，由hbase内部自己生成FSDataOutputStream，并负责关闭它。
+    //这两种方式只能选一种
     protected FileSystem fs;
     protected Path path;
     protected FSDataOutputStream ostream;
-    protected int blockSize = HColumnDescriptor.DEFAULT_BLOCKSIZE;
+    
+    //默认64K
+    //不包括块头的长度
+    protected int blockSize = HColumnDescriptor.DEFAULT_BLOCKSIZE; //就是HFile.DEFAULT_BLOCKSIZE，太绕了
     protected Compression.Algorithm compression =
-        HFile.DEFAULT_COMPRESSION_ALGORITHM;
-    protected HFileDataBlockEncoder encoder = NoOpDataBlockEncoder.INSTANCE;
-    protected KeyComparator comparator;
-    protected ChecksumType checksumType = HFile.DEFAULT_CHECKSUM_TYPE;
-    protected int bytesPerChecksum = DEFAULT_BYTES_PER_CHECKSUM;
+        HFile.DEFAULT_COMPRESSION_ALGORITHM; //默认Compression.Algorithm.NONE
+    protected HFileDataBlockEncoder encoder = NoOpDataBlockEncoder.INSTANCE; //不使用数据块编码
+    protected KeyComparator comparator; //用来比较KeyValue中的Key
+    protected ChecksumType checksumType = HFile.DEFAULT_CHECKSUM_TYPE; //默认ChecksumType.CRC32
+    protected int bytesPerChecksum = DEFAULT_BYTES_PER_CHECKSUM; //16k，也就是按16k算校验和
     protected boolean includeMVCCReadpoint = true;
 
     WriterFactory(Configuration conf, CacheConfig cacheConf) {
@@ -344,6 +352,14 @@ public class HFile {
       return this;
     }
 
+    //调用链:
+    //org.apache.hadoop.hbase.regionserver.Store.Store(Path, HRegion, HColumnDescriptor, FileSystem, Configuration)
+    //  => org.apache.hadoop.hbase.regionserver.Store.createWriterInTmp(int, Algorithm, boolean, boolean)
+    //    => org.apache.hadoop.hbase.regionserver.StoreFile.WriterBuilder.WriterBuilder(Configuration, ......)
+    //    => org.apache.hadoop.hbase.regionserver.StoreFile.WriterBuilder.build()
+    //      => org.apache.hadoop.hbase.regionserver.StoreFile.Writer.Writer(FileSystem, Path, ......)
+    //得在建立列族时通过org.apache.hadoop.hbase.HColumnDescriptor.setBlocksize(int)设置
+    //不能在hbase-site.xml中设置
     public WriterFactory withBlockSize(int blockSize) {
       this.blockSize = blockSize;
       return this;
@@ -355,8 +371,8 @@ public class HFile {
       return this;
     }
 
-    public WriterFactory withCompression(String compressAlgo) {
-      Preconditions.checkNotNull(compression);
+    public WriterFactory withCompression(String compressAlgo) { //必须是小写
+      Preconditions.checkNotNull(compression); //不太合逻辑，正常来说是要检查compressAlgo，不过也不能认为是bug
       this.compression = AbstractHFileWriter.compressionByName(compressAlgo);
       return this;
     }
@@ -384,6 +400,9 @@ public class HFile {
       return this;
     }
 
+    //在org.apache.hadoop.hbase.regionserver.Store.createWriterInTmp中设
+    //不能通过其他方式配
+    //org.apache.hadoop.hbase.regionserver.Compactor.compact(CompactionRequest, long)也调用Store.createWriterInTmp
     public WriterFactory includeMVCCReadpoint(boolean includeMVCCReadpoint) {
       this.includeMVCCReadpoint = includeMVCCReadpoint;
       return this;

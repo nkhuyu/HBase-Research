@@ -176,8 +176,10 @@ public abstract class FSUtils {
         HConstants.ENABLE_DATA_FILE_UMASK, false);
 
     if (enablePermissions) {
+      //如果hbase.data.umask.enable为true，指定了hbase.data.umask后，假如是211，那么就从777中除掉211
+      //FsPermission的构造函数接受的参数是String，不能加0，比如不能是0211而是211
       try {
-        FsPermission perm = new FsPermission(FULL_RWX_PERMISSIONS);
+        FsPermission perm = new FsPermission(FULL_RWX_PERMISSIONS); //默认是777
         // make sure that we have a mask, if not, go default.
         String mask = conf.get(permssionConfKey);
         if (mask == null)
@@ -193,7 +195,7 @@ public abstract class FSUtils {
         return FsPermission.getDefault();
       }
     }
-    return FsPermission.getDefault();
+    return FsPermission.getDefault(); //默认是rwxrwxrwx也就是777
   }
 
   /**

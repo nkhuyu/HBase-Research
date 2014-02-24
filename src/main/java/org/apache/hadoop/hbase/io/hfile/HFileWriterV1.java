@@ -194,6 +194,8 @@ public class HFileWriterV1 extends AbstractHFileWriter {
    *
    * @see {@link #releaseCompressingStream(DataOutputStream)}
    */
+  //每次调用getCompressingStream()时都会得到新的DataOutputStream，
+  //当调用releaseCompressingStream时这个DataOutputStream的size是不同的，但是它里面的outputStream却总是一个，所有pos是会变化的。
   private DataOutputStream getCompressingStream() throws IOException {
     this.compressor = compressAlgo.getCompressor();
     // Get new DOS compression stream. In tfile, the DOS, is not closed,
@@ -226,34 +228,35 @@ public class HFileWriterV1 extends AbstractHFileWriter {
     dos.flush();
     this.compressAlgo.returnCompressor(this.compressor);
     this.compressor = null;
-    return dos.size();
+    return dos.size(); //DataOutputStream有自己的计数器，这个计数器是未受他内嵌的OutputStream影响的(不管它是否是压缩)
   }
 
-  /**
-   * Add a meta block to the end of the file. Call before close(). Metadata
-   * blocks are expensive. Fill one with a bunch of serialized data rather than
-   * do a metadata block per metadata instance. If metadata is small, consider
-   * adding to file info using {@link #appendFileInfo(byte[], byte[])}
-   *
-   * @param metaBlockName
-   *          name of the block
-   * @param content
-   *          will call readFields to get data later (DO NOT REUSE)
-   */
-  public void appendMetaBlock(String metaBlockName, Writable content) {
-    byte[] key = Bytes.toBytes(metaBlockName);
-    int i;
-    for (i = 0; i < metaNames.size(); ++i) {
-      // stop when the current key is greater than our own
-      byte[] cur = metaNames.get(i);
-      if (Bytes.BYTES_RAWCOMPARATOR.compare(cur, 0, cur.length, key, 0,
-          key.length) > 0) {
-        break;
-      }
-    }
-    metaNames.add(i, key);
-    metaData.add(i, content);
-  }
+//  /**
+//   * Add a meta block to the end of the file. Call before close(). Metadata
+//   * blocks are expensive. Fill one with a bunch of serialized data rather than
+//   * do a metadata block per metadata instance. If metadata is small, consider
+//   * adding to file info using {@link #appendFileInfo(byte[], byte[])}
+//   *
+//   * @param metaBlockName
+//   *          name of the block
+//   * @param content
+//   *          will call readFields to get data later (DO NOT REUSE)
+//   */
+//  public void appendMetaBlock(String metaBlockName, Writable content) { //与HFileWriterV2完全一样，应放到父类中
+//    byte[] key = Bytes.toBytes(metaBlockName);
+//    int i;
+//    //metaNames和metaData的东西都按metaNames中的元素进行升序排列
+//    for (i = 0; i < metaNames.size(); ++i) {
+//      // stop when the current key is greater than our own
+//      byte[] cur = metaNames.get(i);
+//      if (Bytes.BYTES_RAWCOMPARATOR.compare(cur, 0, cur.length, key, 0,
+//          key.length) > 0) {
+//        break;
+//      }
+//    }
+//    metaNames.add(i, key);
+//    metaData.add(i, content);
+//  }
 
   /**
    * Add key/value to file. Keys must be added in an order that agrees with the

@@ -58,6 +58,7 @@ import org.apache.hadoop.util.StringUtils;
  * to use the reader can be found in {@link HFileReaderV2} and
  * TestHFileBlockIndex.
  */
+//此类只有BlockIndexReader、BlockIndexWriter、BlockIndexChunk三个静态内部类，其他是静态字段和方法
 public class HFileBlockIndex {
 
   private static final Log LOG = LogFactory.getLog(HFileBlockIndex.class);
@@ -482,7 +483,7 @@ public class HFileBlockIndex {
         int keyLength, ByteBuffer nonRootIndex,
         RawComparator<byte[]> comparator) {
 
-      int numEntries = nonRootIndex.getInt(0);
+      int numEntries = nonRootIndex.getInt(0); //nonRootIndex的pos位置不会变，getInt()这样的调用才会变
       int low = 0;
       int high = numEntries - 1;
       int mid = 0;
@@ -718,6 +719,7 @@ public class HFileBlockIndex {
    * index. However, in most practical cases we will only have leaf-level
    * blocks and the root index, or just the root index.
    */
+  //只有HFile V2才用得到
   public static class BlockIndexWriter extends SchemaConfigured
       implements InlineBlockWriter {
     /**
@@ -799,7 +801,7 @@ public class HFileBlockIndex {
       this.blockWriter = blockWriter;
       this.blockCache = blockCache;
       this.nameForCaching = nameForCaching;
-      this.maxChunkSize = HFileBlockIndex.DEFAULT_MAX_CHUNK_SIZE;
+      this.maxChunkSize = HFileBlockIndex.DEFAULT_MAX_CHUNK_SIZE; //默认128K
     }
 
     public void setMaxChunkSize(int maxChunkSize) {
@@ -1201,13 +1203,19 @@ public class HFileBlockIndex {
      *          sub-entries in all leaf-level chunks, including the one
      *          corresponding to the second-level entry being added.
      */
+    //blockOffset是块在hfile文件中的相对位置，onDiskDataSize如果是压缩的场景就是压缩后的大小
     void add(byte[] firstKey, long blockOffset, int onDiskDataSize,
         long curTotalNumSubEntries) {
       // Record the offset for the secondary index
       secondaryIndexOffsetMarks.add(curTotalNonRootEntrySize);
+      //secondaryIndexOffsetMarks用来记录与块相关的条目在索引块中的相对位置
+      //索引块中的每个条目包括(8字节的blockOffset + 4字节的onDiskDataSize + firstKey.length字节的firstKey)
+      //SECONDARY_INDEX_ENTRY_OVERHEAD就是12，也就是(8字节的blockOffset + 4字节的onDiskDataSize)
+      //对应writeNonRoot中的最后那个for循环
       curTotalNonRootEntrySize += SECONDARY_INDEX_ENTRY_OVERHEAD
           + firstKey.length;
 
+      //对应writeRoot
       curTotalRootSize += Bytes.SIZEOF_LONG + Bytes.SIZEOF_INT
           + WritableUtils.getVIntSize(firstKey.length) + firstKey.length;
 
@@ -1369,6 +1377,12 @@ public class HFileBlockIndex {
      *         format
      */
     int getNonRootSize() {
+        //第一个Bytes.SIZEOF_INT代表writeNonRoot方法中的那个out.writeInt(blockKeys.size());
+        //Bytes.SIZEOF_INT * (blockKeys.size() + 1)代表writeNonRoot方法中的
+        //for (int currentSecondaryIndex : secondaryIndexOffsetMarks)
+        //  out.writeInt(currentSecondaryIndex);
+        //和out.writeInt(curTotalNonRootEntrySize);因为blockKeys的个数和secondaryIndexOffsetMarks是一样的
+        //最后的curTotalNonRootEntrySize就是最后一个for
       return Bytes.SIZEOF_INT                          // Number of entries
           + Bytes.SIZEOF_INT * (blockKeys.size() + 1)  // Secondary index
           + curTotalNonRootEntrySize;                  // All entries
@@ -1388,6 +1402,7 @@ public class HFileBlockIndex {
       for (int i = 0; i < blockKeys.size(); ++i) {
         out.writeLong(blockOffsets.get(i));
         out.writeInt(onDiskDataSizes.get(i));
+        //writeByteArray里会先写一个可变int然后是key的实际字节
         Bytes.writeByteArray(out, blockKeys.get(i));
       }
     }

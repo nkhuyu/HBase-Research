@@ -483,6 +483,7 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
    */
   private void allocateBuffer(boolean extraBytes) {
     int cksumBytes = totalChecksumBytes();
+    //分配整个块的容量+下一个块的头(24字节)，
     int capacityNeeded = headerSize() + uncompressedSizeWithoutHeader +
         cksumBytes +
         (extraBytes ? headerSize() : 0);
@@ -493,8 +494,11 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
     System.arraycopy(buf.array(), buf.arrayOffset(), newBuf.array(),
         newBuf.arrayOffset(), headerSize());
 
+    //把之前的buf的内容copy到newBuf的前24字节后，设置limit，不允许对后24个字节操作，
+    //因为最后24个字节是下一个块的内容
     buf = newBuf;
     buf.limit(headerSize() + uncompressedSizeWithoutHeader + cksumBytes);
+    //例: buf = java.nio.HeapByteBuffer[pos=0 lim=13282 cap=13306]
   }
 
   /** An additional sanity-check in case no compression is being used. */
@@ -731,6 +735,7 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
      * @param checksumType type of checksum
      * @param bytesPerChecksum bytes per checksum
      */
+    //调用顺序: blockSizeWritten -> isWriting -> startWriting -> getUserDataStream -> writeHeaderAndData
     public Writer(Compression.Algorithm compressionAlgorithm,
           HFileDataBlockEncoder dataBlockEncoder, boolean includesMemstoreTS,
           int minorVersion,
@@ -745,6 +750,7 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
         compressor = compressionAlgorithm.getCompressor();
         compressedByteStream = new ByteArrayOutputStream();
         try {
+          //在java.util.zip.GZIPOutputStream中会预写头，有10字节，后面会reset
           compressionStream =
               compressionAlgorithm.createPlainCompressionStream(
                   compressedByteStream, compressor);
@@ -753,6 +759,7 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
               "for algorithm " + compressionAlgorithm, e);
         }
       }
+      //bytesPerChecksum不能小于33字节
       if (minorVersion > MINOR_VERSION_NO_CHECKSUM
           && bytesPerChecksum < HEADER_SIZE_WITH_CHECKSUMS) {
         throw new RuntimeException("Unsupported value of bytesPerChecksum. " +
@@ -777,6 +784,7 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
      */
     public DataOutputStream startWriting(BlockType newBlockType)
         throws IOException {
+      //写满一块时就会触发这个if
       if (state == State.BLOCK_READY && startOffset != -1) {
         // We had a previous block that was written to a stream at a specific
         // offset. Save that offset as the last offset of a block of that type.
@@ -787,12 +795,12 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
       blockType = newBlockType;
 
       baosInMemory.reset();
-      baosInMemory.write(getDummyHeaderForVersion(this.minorVersion));
+      baosInMemory.write(getDummyHeaderForVersion(this.minorVersion)); //事先写占位头(24或33字节)
 
       state = State.WRITING;
 
       // We will compress it later in finishBlock()
-      userDataStream = new DataOutputStream(baosInMemory);
+      userDataStream = new DataOutputStream(baosInMemory); //先写到内存，之后再压缩
       return userDataStream;
     }
 
@@ -830,11 +838,13 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
      * write state to "block ready".
      */
     private void finishBlock() throws IOException {
-      userDataStream.flush();
+      //baosInMemory是ByteArrayOutputStream，flush什么都不做，
+      //userDataStream是DataOutputStream，调用writeXXX方法时，字节就直接转到ByteArrayOutputStream中了
+      userDataStream.flush(); //flush到baosInMemory里面
 
       // This does an array copy, so it is safe to cache this byte array.
-      uncompressedBytesWithHeader = baosInMemory.toByteArray();
-      prevOffset = prevOffsetByType[blockType.getId()];
+      uncompressedBytesWithHeader = baosInMemory.toByteArray(); //在startWriting里预先写了头
+      prevOffset = prevOffsetByType[blockType.getId()]; //一开始是-1
 
       // We need to set state before we can package the block up for
       // cache-on-write. In a way, the block is ready, but not yet encoded or
@@ -860,16 +870,19 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
         version21ChecksumAndCompression();
       }
     }
-
+    
+    //没有checksum
     private void version20compression() throws IOException {
       onDiskChecksum = HConstants.EMPTY_BYTE_ARRAY;
 
       if (compressAlgo != NONE) {
+        //在构造压缩流时，在java.util.zip.GZIPOutputStream中会预写头，有10字节，这里要reset
         compressedByteStream.reset();
         compressedByteStream.write(DUMMY_HEADER_NO_CHECKSUM);
 
         compressionStream.resetState();
-
+        
+        //因为off是从headerSize(this.minorVersion)开始，所以头部不会被压缩
         compressionStream.write(uncompressedBytesWithHeader, headerSize(this.minorVersion),
             uncompressedBytesWithHeader.length - headerSize(this.minorVersion));
 
@@ -878,12 +891,17 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
         compressionStream.finish();
         onDiskDataSizeWithHeader = compressedByteStream.size(); // data size
         onDiskBytesWithHeader = compressedByteStream.toByteArray();
-
+        
+        //回填onDiskBytesWithHeader的头部字节
         put20Header(onDiskBytesWithHeader, 0, onDiskBytesWithHeader.length,
             uncompressedBytesWithHeader.length);
 
 
         //set the header for the uncompressed bytes (for cache-on-write)
+        //回填uncompressedBytesWithHeader的头部字节
+        //onDiskBytesWithHeader.length + onDiskChecksum.length其实是就onDiskBytesWithHeader.length + 0
+        //因为没有checksum，所以不必加的
+        //跟前面的put20Header一样，只是onDiskBytesWithHeader换成了uncompressedBytesWithHeader
         put20Header(uncompressedBytesWithHeader, 0,
             onDiskBytesWithHeader.length + onDiskChecksum.length,
             uncompressedBytesWithHeader.length);
@@ -902,7 +920,8 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
 
     private void version21ChecksumAndCompression() throws IOException {
       // do the compression
-      if (compressAlgo != NONE) {
+      if (compressAlgo != NONE) { //hbase.regionserver.checksum.verify为true且使用压缩时转到这个if分枝
+        //在构造压缩流时，在java.util.zip.GZIPOutputStream中会预写头，有10字节，这里要reset
         compressedByteStream.reset();
         compressedByteStream.write(DUMMY_HEADER_WITH_CHECKSUM);
 
@@ -918,16 +937,30 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
         onDiskDataSizeWithHeader = compressedByteStream.size(); // data size
 
         // reserve space for checksums in the output byte stream
+        //按bytesPerChecksum算一下有多少个校验和，事些保留这么多字节
+        //比如假设bytesPerChecksum是100，意思就是每100个字节算一次校验和，
+        //假设总字节是1000，那么就有10个校验和，并且每个校验和占4字节，这样就多了10*4=40个字节，
+        //多出的字节放在compressedByteStream最后(也就是放在onDiskBytesWithHeader最后)
+        //此方法会往compressedByteStream写数据，都是0，以便后面在generateChecksums回填
         ChecksumUtil.reserveSpaceForChecksums(compressedByteStream, 
           onDiskDataSizeWithHeader, bytesPerChecksum);
 
 
-        onDiskBytesWithHeader = compressedByteStream.toByteArray();
+        onDiskBytesWithHeader = compressedByteStream.toByteArray(); //会copy数据
+        
+        //onDiskDataSizeWithHeader和onDiskBytesWithHeader.length是不相等的，
+        //onDiskDataSizeWithHeader不包含Checksum中的字节个数
+        //而onDiskBytesWithHeader包含
+        //有三个值: 实际存放到硬盘的数据与校验和总长度、未压缩的数据长度、实际存放到硬盘的数据长度
         put21Header(onDiskBytesWithHeader, 0, onDiskBytesWithHeader.length,
             uncompressedBytesWithHeader.length, onDiskDataSizeWithHeader);
 
        // generate checksums for header and data. The checksums are
        // part of onDiskBytesWithHeader itself.
+
+        //在onDiskBytesWithHeader中按bytesPerChecksum个字节算校验和，
+        //计算后的校验和放到onDiskBytesWithHeader从onDiskDataSizeWithHeader开始的位置
+        //(注: 下面的else分枝校验和是放到独立的onDiskChecksum中，而不是uncompressedBytesWithHeader)
        ChecksumUtil.generateChecksums(
          onDiskBytesWithHeader, 0, onDiskDataSizeWithHeader,
          onDiskBytesWithHeader, onDiskDataSizeWithHeader,
@@ -937,26 +970,33 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
         onDiskChecksum = HConstants.EMPTY_BYTE_ARRAY;
 
         //set the header for the uncompressed bytes (for cache-on-write)
+        //有三个值: 实际存放到硬盘的数据与校验和总长度、未压缩的数据长度、实际存放到硬盘的数据长度
+        //onDiskChecksum.length其实是0
         put21Header(uncompressedBytesWithHeader, 0,
             onDiskBytesWithHeader.length + onDiskChecksum.length,
             uncompressedBytesWithHeader.length, onDiskDataSizeWithHeader);
 
-      } else {
+      } else { //hbase.regionserver.checksum.verify为true且不使用压缩时转到这个else分枝
         // If we are not using any compression, then the
         // checksums are written to its own array onDiskChecksum.
         onDiskBytesWithHeader = uncompressedBytesWithHeader;
 
         onDiskDataSizeWithHeader = onDiskBytesWithHeader.length;
+        //需要多少个字节来存放校验和，
+        //通常是uncompressedBytesWithHeader.length/bytesPerChecksum*4，
+        //如果uncompressedBytesWithHeader.length/bytesPerChecksum不能取整，则多加1
         int numBytes = (int)ChecksumUtil.numBytes(
                           uncompressedBytesWithHeader.length,
                           bytesPerChecksum);
         onDiskChecksum = new byte[numBytes];
 
         //set the header for the uncompressed bytes
+        //有三个值: 实际存放到硬盘的数据与校验和总长度、未压缩的数据长度、实际存放到硬盘的数据长度
         put21Header(uncompressedBytesWithHeader, 0,
             onDiskBytesWithHeader.length + onDiskChecksum.length,
             uncompressedBytesWithHeader.length, onDiskDataSizeWithHeader);
 
+        //在uncompressedBytesWithHeader中按bytesPerChecksum个字节算校验和，计算后的校验和放到onDiskChecksum中
         ChecksumUtil.generateChecksums(
           uncompressedBytesWithHeader, 0, uncompressedBytesWithHeader.length,
           onDiskChecksum, 0,
@@ -969,21 +1009,23 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
      * {@link #dataBlockEncoder}.
      */
     private void encodeDataBlockForDisk() throws IOException {
-      if (blockType != BlockType.DATA) {
+      if (blockType != BlockType.DATA) { //只对数据块编码
         return; // skip any non-data block
       }
 
       // do data block encoding, if data block encoder is set
+      //不包含头
       ByteBuffer rawKeyValues = ByteBuffer.wrap(uncompressedBytesWithHeader,
           headerSize(this.minorVersion), uncompressedBytesWithHeader.length -
           headerSize(this.minorVersion)).slice();
+      //写到硬盘前，先进行编码
       Pair<ByteBuffer, BlockType> encodingResult =
           dataBlockEncoder.beforeWriteToDisk(rawKeyValues,
               includesMemstoreTS, getDummyHeaderForVersion(this.minorVersion));
 
       BlockType encodedBlockType = encodingResult.getSecond();
       if (encodedBlockType == BlockType.ENCODED_DATA) {
-        uncompressedBytesWithHeader = encodingResult.getFirst().array();
+        uncompressedBytesWithHeader = encodingResult.getFirst().array(); //编码前的uncompressedBytesWithHeader被GC
         blockType = BlockType.ENCODED_DATA;
       } else {
         // There is no encoding configured. Do some extra sanity-checking.
@@ -991,6 +1033,7 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
           throw new IOException("Unexpected block type coming out of data " +
               "block encoder: " + encodedBlockType);
         }
+        //userDataStream.size()就是实际写入的字节数，不包含头
         if (userDataStream.size() !=
             uncompressedBytesWithHeader.length - headerSize(this.minorVersion)) {
           throw new IOException("Uncompressed size mismatch: "
@@ -1008,6 +1051,18 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
      * @param onDiskDataSize size of the block on disk with header
      *        and data but not including the checksums
      */
+
+    //回填带有Checksum的数据块头
+    //        每个block有一个33字节的头
+    //        前8个字节是表示block类型的MAGIC，对应org.apache.hadoop.hbase.io.hfile.BlockType的那些枚举常量名，
+    //        接着4个字节表示onDiskBytesWithHeader.length - HEADER_SIZE
+    //        接着4个字节表示uncompressedSizeWithoutHeader
+    //        接着8个字节表示prevOffset (前一个块的offset，比如，对于第一个块，那么它看到的prevOffset是-1，对于第二个块，是0)
+    //
+    //        接着1个字节表示checksumType code(默认是1: org.apache.hadoop.hbase.util.ChecksumType.CRC32)
+    //        接着4个字节表示bytesPerChecksum(默认16k，不能小于block头长度(头长度是33个字节))
+    //        最后4个字节表示onDiskDataSizeWithHeader
+
     private void put21Header(byte[] dest, int offset, int onDiskSize,
                              int uncompressedSize, int onDiskDataSize) {
       offset = blockType.put(dest, offset);
@@ -1018,10 +1073,16 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
       offset = Bytes.putInt(dest, offset, bytesPerChecksum);
       offset = Bytes.putInt(dest, offset, onDiskDataSizeWithHeader);
     }
-
-
+    
+    //回填不带有Checksum的数据块头
+    //        每个block有一个24字节的头
+    //        前8个字节是表示block类型的MAGIC，对应org.apache.hadoop.hbase.io.hfile.BlockType的那些枚举常量名，
+    //        接着4个字节表示onDiskSizeWithoutHeader
+    //        接着4个字节表示uncompressedSizeWithoutHeader
+    //        最后8个字节表示prevOffset
     private void put20Header(byte[] dest, int offset, int onDiskSize,
                              int uncompressedSize) {
+      //不使用压缩时，onDiskSize和uncompressedSize一样
       offset = blockType.put(dest, offset);
       offset = Bytes.putInt(dest, offset, onDiskSize - HEADER_SIZE_NO_CHECKSUM);
       offset = Bytes.putInt(dest, offset, uncompressedSize - HEADER_SIZE_NO_CHECKSUM);
@@ -1035,7 +1096,7 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
      * @param out
      * @throws IOException
      */
-    public void writeHeaderAndData(FSDataOutputStream out) throws IOException {
+    public void writeHeaderAndData(FSDataOutputStream out) throws IOException { //把内存中的数据写到out中
       long offset = out.getPos();
       if (startOffset != -1 && offset != startOffset) {
         throw new IOException("A " + blockType + " block written to a "
@@ -1059,6 +1120,7 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
     private void writeHeaderAndData(DataOutputStream out) throws IOException {
       ensureBlockReady();
       out.write(onDiskBytesWithHeader);
+      //不使用压缩但是使用校验和时还要写校验和字节(onDiskChecksum)
       if (compressAlgo == NONE && minorVersion > MINOR_VERSION_NO_CHECKSUM) {
         if (onDiskChecksum == HConstants.EMPTY_BYTE_ARRAY) {
           throw new IOException("A " + blockType 
@@ -1312,7 +1374,7 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
     protected int hdrSize;
 
     /** The filesystem used to access data */
-    protected HFileSystem hfs;
+    protected HFileSystem hfs; //无用
 
     /** The path (if any) where this data is coming from */
     protected Path path;
@@ -1922,6 +1984,7 @@ public class HFileBlock extends SchemaConfigured implements Cacheable {
               false, offset, pread);
         }
 
+        //解析块头24个字节，分别保存到HFileBlock的4个字段, HFileBlock的buf指向headerBuf
         b = new HFileBlock(headerBuf, getMinorVersion());
 
         // This will also allocate enough room for the next block's header.

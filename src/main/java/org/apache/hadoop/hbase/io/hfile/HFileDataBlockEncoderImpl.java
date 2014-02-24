@@ -50,6 +50,16 @@ public class HFileDataBlockEncoderImpl implements HFileDataBlockEncoder {
    * @param inCache What kind of data block encoding will be used in block
    *          cache.
    */
+  //满足两个条件:
+  //1. 数据写到硬盘时可以不用编码
+  //2. 如果硬盘编码不指定时，硬盘编码和内存编码必须一样
+
+  //例1: new HFileDataBlockEncoderImpl(DataBlockEncoding.NONE,DataBlockEncoding.FAST_DIFF);
+  //表示数据写到硬盘时不用编码，但是放到cache时用FAST_DIFF编码
+
+  //例2: new HFileDataBlockEncoderImpl(DataBlockEncoding.FAST_DIFF,DataBlockEncoding.FAST_DIFF);
+  //表示硬盘编码和cache编码一样
+  //等价于HFileDataBlockEncoderImpl(DataBlockEncoding.FAST_DIFF)
   public HFileDataBlockEncoderImpl(DataBlockEncoding onDisk,
       DataBlockEncoding inCache) {
     this.onDisk = onDisk != null ?
@@ -138,6 +148,7 @@ public class HFileDataBlockEncoderImpl implements HFileDataBlockEncoder {
     }
 
     if (block.getBlockType() == BlockType.ENCODED_DATA) {
+      //如果使用了数据块编码，则在头部后的第一字节开如的两字节就是编码id(比如，如果头部有33字节，那么下标33、34的字节组成码id)
       if (block.getDataBlockEncodingId() == onDisk.getId()) {
         // The block is already in the desired in-cache encoding.
         return block;

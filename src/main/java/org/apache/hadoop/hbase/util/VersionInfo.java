@@ -37,7 +37,9 @@ public class VersionInfo {
   private static VersionAnnotation version;
 
   static {
+    //对应/hbase/target/generated-sources/java/org/apache/hadoop/hbase/package-info.java文件
     myPackage = VersionAnnotation.class.getPackage();
+    //在package-info.java中的注解
     version = myPackage.getAnnotation(VersionAnnotation.class);
   }
 
@@ -48,6 +50,8 @@ public class VersionInfo {
   static Package getPackage() {
     return myPackage;
   }
+  
+  //有5个字段version、revision、date、user、url
 
   /**
    * Get the hbase version.

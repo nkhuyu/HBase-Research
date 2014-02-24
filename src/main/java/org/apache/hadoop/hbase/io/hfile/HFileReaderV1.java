@@ -108,6 +108,7 @@ public class HFileReaderV1 extends AbstractHFileReader {
     metaBlockIndexReader =
         new HFileBlockIndex.BlockIndexReader(Bytes.BYTES_RAWCOMPARATOR, 1);
 
+    //Data索引和Meta索引所占的字节数
     int sizeToLoadOnOpen = (int) (fileSize - trailer.getLoadOnOpenDataOffset() -
         trailer.getTrailerSize());
     byte[] dataAndMetaIndex = readAllIndex(istream,
@@ -424,6 +425,7 @@ public class HFileReaderV1 extends AbstractHFileReader {
     @Override
     public int seekTo(byte[] key, int offset, int length) throws IOException {
       int b = reader.blockContainingKey(key, offset, length);
+      //当key在第一个块之前时就返回负数, 说明不存在，如果key大于最后一个块的每个key，不管大多少都会返回最后一个块的块号
       if (b < 0) return -1; // falls before the beginning of the file! :-(
       // Avoid re-reading the same block (that'd be dumb).
       loadBlock(b, true);

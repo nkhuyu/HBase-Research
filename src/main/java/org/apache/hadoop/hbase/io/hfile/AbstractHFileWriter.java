@@ -77,6 +77,7 @@ public abstract class AbstractHFileWriter extends SchemaConfigured
   /** Key comparator. Used to ensure we write in order. */
   protected final RawComparator<byte[]> comparator;
 
+  //metaNames和metaData的东西都按metaNames中的元素进行升序排列
   /** Meta block names. */
   protected List<byte[]> metaNames = new ArrayList<byte[]>();
 
@@ -106,7 +107,7 @@ public abstract class AbstractHFileWriter extends SchemaConfigured
    * Name for this object used when logging or in toString. Is either
    * the result of a toString on stream or else name of passed file Path.
    */
-  protected final String name;
+  protected final String name; //hfile的文件名(不含路径)或者当不用path参数时是传递进来的FSDataOutputStream的toString()
 
   public AbstractHFileWriter(CacheConfig cacheConf,
       FSDataOutputStream outputStream, Path path, int blockSize,
@@ -269,5 +270,39 @@ public abstract class AbstractHFileWriter extends SchemaConfigured
     FsPermission perms = FSUtils.getFilePermissions(fs, conf,
         HConstants.DATA_FILE_UMASK_KEY);
     return FSUtils.create(fs, path, perms);
+  }
+  
+  //这个方法是我移到这的，因为在原来的HFileWriterV2和HFileWriterV1中的代码完全一样
+  /**
+   * Add a meta block to the end of the file. Call before close(). Metadata
+   * blocks are expensive. Fill one with a bunch of serialized data rather than
+   * do a metadata block per metadata instance. If metadata is small, consider
+   * adding to file info using {@link #appendFileInfo(byte[], byte[])}
+   *
+   * @param metaBlockName
+   *          name of the block
+   * @param content
+   *          will call readFields to get data later (DO NOT REUSE)
+   */
+  public void appendMetaBlock(String metaBlockName, Writable content) { //与HFileWriterV2完全一样，应放到父类中
+    byte[] key = Bytes.toBytes(metaBlockName);
+    int i;
+    //metaNames和metaData的东西都按metaNames中的元素进行升序排列
+    for (i = 0; i < metaNames.size(); ++i) {
+      // stop when the current key is greater than our own
+      byte[] cur = metaNames.get(i);
+      if (Bytes.BYTES_RAWCOMPARATOR.compare(cur, 0, cur.length, key, 0,
+          key.length) > 0) {
+        break;
+      }
+    }
+    metaNames.add(i, key);
+    metaData.add(i, content);
+
+    //我加上的
+//    for (i = 0; i < metaNames.size(); ++i) {
+//        System.out.println(new String(metaNames.get(i)));
+//    }
+//    System.out.println();
   }
 }
