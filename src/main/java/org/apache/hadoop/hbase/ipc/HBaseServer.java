@@ -222,6 +222,7 @@ public abstract class HBaseServer implements RpcServer {
   protected BlockingQueue<Call> callQueue; // queued calls
   protected final Counter callQueueSize = new Counter();
   protected BlockingQueue<Call> priorityCallQueue;
+  private final Counter activeRpcCount = new Counter();
 
   protected int highPriorityLevel;  // what level a high priority call is at
 
@@ -1397,6 +1398,12 @@ public abstract class HBaseServer implements RpcServer {
           status.pause("Waiting for a call");
           Call call = myCallQueue.take(); // pop the queue; maybe blocked here
           updateCallQueueLenMetrics(myCallQueue);
+          if (!call.connection.channel.isOpen()) {
+            if (LOG.isDebugEnabled()) {
+              LOG.debug(Thread.currentThread().getName() + ": skipped " + call);
+            }
+            continue;
+          }
           status.setStatus("Setting up call");
           status.setConnection(call.connection.getHostAddress(), 
               call.connection.getRemotePort());
@@ -1411,6 +1418,7 @@ public abstract class HBaseServer implements RpcServer {
 
           CurCall.set(call);
           try {
+            activeRpcCount.increment();
             if (!started)
               throw new ServerNotRunningYetException("Server is not running yet");
 
@@ -1433,6 +1441,8 @@ public abstract class HBaseServer implements RpcServer {
             // Must always clear the request context to avoid leaking
             // credentials between requests.
             RequestContext.clear();
+            activeRpcCount.decrement();
+            rpcMetrics.activeRpcCount.set((int) activeRpcCount.get());
           }
           CurCall.set(null);
           callQueueSize.add(call.getSize() * -1);

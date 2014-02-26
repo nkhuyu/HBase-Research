@@ -128,6 +128,8 @@ import org.apache.hadoop.hbase.ipc.ProtocolSignature;
 import org.apache.hadoop.hbase.ipc.RpcEngine;
 import org.apache.hadoop.hbase.ipc.RpcServer;
 import org.apache.hadoop.hbase.ipc.ServerNotRunningYetException;
+import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.RegionServerInfo;
 import org.apache.hadoop.hbase.regionserver.Leases.LeaseStillHeldException;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionProgress;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
@@ -356,8 +358,8 @@ public class HRegionServer implements HRegionInterface, HBaseRPCErrorHandler,
    */
   private ServerName serverNameFromMasterPOV;
 
-  // Port we put up the webui on.
-  private int webuiport = -1;
+  // region server static info like info port
+  private RegionServerInfo.Builder rsInfo;
 
   /**
    * This servers startcode.
@@ -483,6 +485,10 @@ public class HRegionServer implements HRegionInterface, HBaseRPCErrorHandler,
         abort("Uncaught exception in service thread " + t.getName(), e);
       }
     };
+    this.rsInfo = RegionServerInfo.newBuilder();
+    // Put up the webui.  Webui may come up on port other than configured if
+    // that port is occupied. Adjust serverInfo if this is the case.
+    this.rsInfo.setInfoPort(putUpWebUI());
   }
 
   /** Handle all the snapshot requests to this server */
@@ -773,13 +779,14 @@ public class HRegionServer implements HRegionInterface, HBaseRPCErrorHandler,
           } else if (this.stopping) {
             boolean allUserRegionsOffline = areAllUserRegionsOffline();
             if (allUserRegionsOffline) {
-              // Set stopped if no requests since last time we went around the loop.
-              // The remaining meta regions will be closed on our way out.
-              if (oldRequestCount == this.requestCount.get()) {
+              // Set stopped if no more write requests tp meta tables
+              // since last time we went around the loop.  Any open
+              // meta regions will be closed on our way out.
+              if (oldRequestCount == getWriteRequestCount()) {
                 stop("Stopped; only catalog regions remaining online");
                 break;
               }
-              oldRequestCount = this.requestCount.get();
+              oldRequestCount = getWriteRequestCount();
             } else {
               // Make sure all regions have been closed -- some regions may
               // have not got it because we were splitting at the time of
@@ -919,6 +926,17 @@ public class HRegionServer implements HRegionInterface, HBaseRPCErrorHandler,
       }
     }
     return allUserRegionsOffline;
+  }
+
+  /**
+   * @return Current write count for all online regions.
+   */
+  private long getWriteRequestCount() {
+    int writeCount = 0;
+    for (Map.Entry<String, HRegion> e: this.onlineRegions.entrySet()) {
+      writeCount += e.getValue().getWriteRequestsCount();
+    }
+    return writeCount;
   }
 
   void tryRegionServerReport()
@@ -1126,9 +1144,10 @@ public class HRegionServer implements HRegionInterface, HBaseRPCErrorHandler,
     return ZKUtil.joinZNode(this.zooKeeper.rsZNode, getServerName().toString());
   }
 
-  private void createMyEphemeralNode() throws KeeperException {
-    ZKUtil.createEphemeralNodeAndWatch(this.zooKeeper, getMyEphemeralNodePath(),
-      HConstants.EMPTY_BYTE_ARRAY);
+  private void createMyEphemeralNode() throws KeeperException, IOException {
+    byte[] data = ProtobufUtil.prependPBMagic(rsInfo.build().toByteArray());
+    ZKUtil.createEphemeralNodeAndWatch(this.zooKeeper,
+      getMyEphemeralNodePath(), data);
   }
 
   private void deleteMyEphemeralNode() throws KeeperException {
@@ -1710,10 +1729,6 @@ public class HRegionServer implements HRegionInterface, HBaseRPCErrorHandler,
     this.leases.setName(n + ".leaseChecker");
     this.leases.start();
 
-    // Put up the webui.  Webui may come up on port other than configured if
-    // that port is occupied. Adjust serverInfo if this is the case.
-    this.webuiport = putUpWebUI();
-
     if (this.replicationSourceHandler == this.replicationSinkHandler &&
         this.replicationSourceHandler != null) {
       this.replicationSourceHandler.startReplicationService();
@@ -1769,7 +1784,7 @@ public class HRegionServer implements HRegionInterface, HBaseRPCErrorHandler,
         port++;
       }
     }
-    return port;
+    return this.infoServer.getPort();
   }
 
   /*
@@ -3790,7 +3805,7 @@ public class HRegionServer implements HRegionInterface, HBaseRPCErrorHandler,
   public HServerInfo getHServerInfo() throws IOException {
     checkOpen();
     return new HServerInfo(new HServerAddress(this.isa),
-      this.startcode, this.webuiport);
+      this.startcode, this.rsInfo.getInfoPort());
   }
 
   @SuppressWarnings("unchecked")
