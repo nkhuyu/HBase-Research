@@ -49,6 +49,7 @@ import org.apache.hadoop.hbase.util.Bytes;
  * <p>
  * This class is NOT thread-safe as queries are never multi-threaded
  */
+//如果scan时指定了具体的列，那么就对应这个类
 public class ExplicitColumnTracker implements ColumnTracker {
 
   private final int maxVersions;
@@ -108,10 +109,11 @@ public class ExplicitColumnTracker implements ColumnTracker {
       int length, byte type) {
     // delete markers should never be passed to an
     // *Explicit*ColumnTracker
+    //为什么assert？要见ScanQueryMatcher.match(KeyValue)中的if (kv.isDelete())
     assert !KeyValue.isDelete(type);
     do {
       // No more columns left, we are done with this query
-      if(done()) {
+      if(done()) { //要scan的列都找到了
         return ScanQueryMatcher.MatchCode.SEEK_NEXT_ROW; // done_row
       }
 
@@ -218,7 +220,10 @@ public class ExplicitColumnTracker implements ColumnTracker {
    * @param offset
    * @param length
    */
+  //只有getNextRowOrNextColumn方法在用，用private更好
   public void doneWithColumn(byte [] bytes, int offset, int length) {
+      //System.out.println(Bytes.toString(bytes,  offset, length));
+      //System.out.println(Bytes.toString(column.getBuffer(), column.getOffset(), column.getLength()));
     while (this.column != null) {
       int compare = Bytes.compareTo(column.getBuffer(), column.getOffset(),
           column.getLength(), bytes, offset, length);
@@ -238,6 +243,7 @@ public class ExplicitColumnTracker implements ColumnTracker {
     }
   }
 
+  //参数是字段名
   public MatchCode getNextRowOrNextColumn(byte[] bytes, int offset,
       int qualLength) {
     doneWithColumn(bytes, offset,qualLength);

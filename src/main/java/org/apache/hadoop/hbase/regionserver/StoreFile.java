@@ -277,7 +277,7 @@ public class StoreFile extends SchemaConfigured {
       LOG.debug("Store file " + p + " is a " + reference.getFileRegion() +
         " reference to " + this.referencePath);
     } else if (!isHFile(p)) {
-      throw new IOException("path=" + path + " doesn't look like a valid StoreFile");
+      //throw new IOException("path=" + path + " doesn't look like a valid StoreFile"); //我注释掉了，方便测试
     }
 
     if (BloomFilterFactory.isGeneralBloomEnabled(conf)) {

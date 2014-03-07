@@ -114,7 +114,7 @@ public class TimeRangeTracker implements Writable {
    * @param tr TimeRange
    * @return True if there is overlap, false otherwise
    */
-  public boolean includesTimeRange(final TimeRange tr) {
+  public boolean includesTimeRange(final TimeRange tr) { //两个范围有交集就可以了
     return (this.minimumTimestamp < tr.getMax() &&
         this.maximumTimestamp >= tr.getMin());
   }

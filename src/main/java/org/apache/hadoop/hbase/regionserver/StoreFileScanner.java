@@ -280,6 +280,8 @@ public class StoreFileScanner implements KeyValueScanner {
 
     boolean haveToSeek = true;
     if (useBloom) {
+      //ROWCOL的generalBloomFilter和DeleteFamilyBloomFilter只会同时出现其中之一
+      //见org.apache.hadoop.hbase.regionserver.StoreFile.Writer的构造函数
       // check ROWCOL Bloom filter first.
       if (reader.getBloomFilterType() == StoreFile.BloomType.ROWCOL) {
         haveToSeek = reader.passesGeneralBloomFilter(kv.getBuffer(),

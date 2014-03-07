@@ -207,7 +207,7 @@ public class HFileWriterV2 extends AbstractHFileWriter {
 
   /** Gives inline block writers an opportunity to contribute blocks. */
   private void writeInlineBlocks(boolean closing) throws IOException {
-    //对于BlockIndexWriter，写索引叶子节点块，直接跟在数据块后面，直接写往outputStream
+    //对于BlockIndexWriter，写叶子索引块，直接跟在数据块后面，直接写往outputStream
     for (InlineBlockWriter ibw : inlineBlockWriters) { //是否达到索引块的大小了或者是由close触发
       while (ibw.shouldWriteBlock(closing)) {
         long offset = outputStream.getPos();
@@ -307,6 +307,7 @@ public class HFileWriterV2 extends AbstractHFileWriter {
    *          Value to add. Cannot be empty nor null.
    * @throws IOException
    */
+  //这个方法只在测试中调用
   @Override
   public void append(final byte[] key, final byte[] value) throws IOException {
     append(0, key, 0, key.length, value, 0, value.length);

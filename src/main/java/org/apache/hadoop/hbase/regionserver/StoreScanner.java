@@ -120,10 +120,8 @@ public class StoreScanner extends NonLazyKeyValueScanner
     matcher = new ScanQueryMatcher(scan, scanInfo, columns,
         ScanType.USER_SCAN, Long.MAX_VALUE, HConstants.LATEST_TIMESTAMP,
         oldestUnexpiredTS);
-
     // Pass columns to try to filter out unnecessary StoreFiles.
     List<KeyValueScanner> scanners = getScannersNoCompaction();
-
     // Seek all scanners to the start of the Row (or if the exact matching row
     // key does not exist, then to the start of the next matching Row).
     // Always check bloom filter to optimize the top row seek for delete
@@ -137,7 +135,6 @@ public class StoreScanner extends NonLazyKeyValueScanner
         scanner.seek(matcher.getStartKey());
       }
     }
-
     // Combine all seeked scanners with a heap
     heap = new KeyValueHeap(scanners, store.comparator);
 
@@ -382,6 +379,9 @@ public class StoreScanner extends NonLazyKeyValueScanner
     long cumulativeMetric = 0;
     int count = 0;
     try {
+      //limit是指碰到相同的rowKey时要取多少个KeyValue
+      //可以通过Scan.setBatch方法设置
+      //下面这个循环用于遍历相同rowKey的KeyValue
       LOOP: while((kv = this.heap.peek()) != null) {
         // Check that the heap gives us KVs in an increasing order.
         assert prevKV == null || comparator == null || comparator.compare(prevKV, kv) <= 0 :
@@ -403,6 +403,9 @@ public class StoreScanner extends NonLazyKeyValueScanner
               }
               reseek(matcher.getKeyForNextRow(kv));
             } else if (qcode == ScanQueryMatcher.MatchCode.INCLUDE_AND_SEEK_NEXT_COL) {
+              //对于ExplicitColumnTracker会直接seek，比如有q1、q2、q3，现在只要q1和q3
+              //那么找到q1后，在getKeyForNextColumn中，ExplicitColumnTracker.getColumnHint()会得到q3,
+              //然后用q3来组成一个KeyValue去reseek，而不是从hfile中取回q2再到StoreScanner层做无用的判断。
               reseek(matcher.getKeyForNextColumn(kv));
             } else {
               this.heap.next();

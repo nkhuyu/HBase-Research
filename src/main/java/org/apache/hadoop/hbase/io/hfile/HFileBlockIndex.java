@@ -758,6 +758,8 @@ public class HFileBlockIndex {
      * leaf-level blocks. For the data block index this is equal to the number
      * of data blocks.
      */
+    //对于dataBlockIndexWriter就是数据块的个数
+    //对于metaBlockIndexWriter就是metaNames的个数
     private long totalNumEntries;
 
     /** Total compressed size of all index blocks. */
@@ -1203,7 +1205,7 @@ public class HFileBlockIndex {
      *          sub-entries in all leaf-level chunks, including the one
      *          corresponding to the second-level entry being added.
      */
-    //blockOffset是块在hfile文件中的相对位置，onDiskDataSize如果是压缩的场景就是压缩后的大小
+    //blockOffset是数据块或叶子索引块在hfile文件中的相对位置，onDiskDataSize如果是压缩的场景就是压缩后的大小
     void add(byte[] firstKey, long blockOffset, int onDiskDataSize,
         long curTotalNumSubEntries) {
       // Record the offset for the secondary index

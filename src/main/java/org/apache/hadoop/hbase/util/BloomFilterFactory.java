@@ -189,7 +189,10 @@ public final class BloomFilterFactory {
     // the resulting false positive rate is err = 1 - (1 - p)^2, and
     // p = 1 - sqrt(1 - err).
     if (bloomType == BloomType.ROWCOL) {
-      err = (float) (1 - Math.sqrt(1 - err));
+      //err默认是0.01
+      //现在变成0.0050125583，对于ROWCOL因为增加了COL，所以错误率更小了，
+      //只有ROW的话(也就是RowKey)因为重复多，所以错误率大点
+      err = (float) (1 - Math.sqrt(1 - err)); //sqrt是开方，比如Math.sqrt(4.0)=2.0
     }
 
     int maxFold = conf.getInt(IO_STOREFILE_BLOOM_MAX_FOLD,
@@ -207,6 +210,7 @@ public final class BloomFilterFactory {
     } else {
       // A single-block Bloom filter. Only used when testing HFile format
       // version 1.
+      //对于hfile v1，超过1亿2800万就不使用BloomFilterWriter了
       int tooBig = conf.getInt(IO_STOREFILE_BLOOM_MAX_KEYS,
           128 * 1000 * 1000);
 
@@ -238,6 +242,7 @@ public final class BloomFilterFactory {
    * @return the new Bloom filter, or null in case Bloom filters are disabled
    *         or when failed to create one.
    */
+  //Delete Family Bloom filter不像ROWCOL普通Bloom filter那样调整错误率
   public static BloomFilterWriter createDeleteBloomAtWrite(Configuration conf,
       CacheConfig cacheConf, int maxKeys, HFile.Writer writer) {
     if (!isDeleteFamilyBloomEnabled(conf)) {

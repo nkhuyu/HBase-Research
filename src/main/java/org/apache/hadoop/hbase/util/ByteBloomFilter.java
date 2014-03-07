@@ -542,6 +542,7 @@ public class ByteBloomFilter implements BloomFilter, BloomFilterWriter {
     out.write(bloom.array(), bloom.arrayOffset(), bloom.limit());
   }
 
+  //下面两个方法在org.apache.hadoop.hbase.io.hfile.HFileWriterV1.addGeneralBloomFilter(BloomFilterWriter)中调用
   @Override
   public Writable getMetaWriter() {
     return new MetaWriter();

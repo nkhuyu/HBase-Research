@@ -39,6 +39,7 @@ import org.apache.hadoop.io.Writable;
  * section of an {@link org.apache.hadoop.hbase.io.hfile.HFile} to the
  * {@link CompoundBloomFilter} class.
  */
+//只有hfile v2才支持
 public class CompoundBloomFilterWriter extends CompoundBloomFilterBase
     implements BloomFilterWriter, InlineBlockWriter {
 
@@ -201,12 +202,14 @@ public class CompoundBloomFilterWriter extends CompoundBloomFilterBase
     ReadyChunk readyChunk = readyChunks.peek();
 
     ByteBloomFilter readyChunkBloom = readyChunk.chunk;
+    //对应hfile v2架构图中的Bloom block，像叶子索引块一样跟在数据块后面
     readyChunkBloom.getDataWriter().write(out);
   }
 
   @Override
   public void blockWritten(long offset, int onDiskSize, int uncompressedSize) {
     ReadyChunk readyChunk = readyChunks.remove();
+    //bloomBlockIndex只有一层
     bloomBlockIndexWriter.addEntry(readyChunk.firstKey, offset, onDiskSize);
   }
 
@@ -215,6 +218,9 @@ public class CompoundBloomFilterWriter extends CompoundBloomFilterBase
     return BlockType.BLOOM_CHUNK;
   }
 
+  //触发条件
+  //org.apache.hadoop.hbase.io.hfile.HFileWriterV2.close()=>BlockWritable.writeToBlock
+  //在org.apache.hadoop.hbase.io.hfile.HFileWriterV2.addBloomFilter(BloomFilterWriter, BlockType)中做为一个匿名内部类
   private class MetaWriter implements Writable {
     protected MetaWriter() {}
 
@@ -230,6 +236,8 @@ public class CompoundBloomFilterWriter extends CompoundBloomFilterBase
      * CompoundBloomFilter#CompoundBloomFilter(DataInput,
      * org.apache.hadoop.hbase.io.hfile.HFile.Reader)} reads fields.
      */
+    //在CompoundBloomFilter(DataInput, Reader)的构造函数中读
+    //对应hfile v2架构图中的Bloom filter metadata
     @Override
     public void write(DataOutput out) throws IOException {
       out.writeInt(VERSION);

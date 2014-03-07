@@ -113,6 +113,7 @@ public interface ColumnTracker {
   /**
    * Retrieve the MatchCode for the next row or column
    */
+  //参数是字段名
   public MatchCode getNextRowOrNextColumn(byte[] bytes, int offset,
       int qualLength);
 

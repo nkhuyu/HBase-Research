@@ -1395,6 +1395,9 @@ public class Store extends SchemaConfigured implements HeapSize {
       synchronized (filesCompacting) {
         // candidates = all storefiles not already in compaction queue
         List<StoreFile> candidates = Lists.newArrayList(storefiles);
+        //我加上的
+        for(StoreFile f:candidates)
+            System.out.println(f.getReader().getSequenceID());
         if (!filesCompacting.isEmpty()) {
           // exclude all files older than the newest file we're currently
           // compacting. this allows us to preserve contiguity (HBASE-2856)

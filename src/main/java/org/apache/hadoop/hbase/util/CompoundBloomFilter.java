@@ -62,7 +62,8 @@ public class CompoundBloomFilter extends CompoundBloomFilterBase
   public CompoundBloomFilter(DataInput meta, HFile.Reader reader)
       throws IOException {
     this.reader = reader;
-
+    //这些内容在CompoundBloomFilterWriter.MetaWriter.write(DataOutput)中写
+    //VERSION字段在调用者那里已经读了
     totalByteSize = meta.readLong();
     hashCount = meta.readInt();
     hashType = meta.readInt();

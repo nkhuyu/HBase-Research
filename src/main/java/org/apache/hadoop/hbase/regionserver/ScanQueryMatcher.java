@@ -212,11 +212,35 @@ public class ScanQueryMatcher {
    * @throws IOException in case there is an internal consistency problem
    *      caused by a data corruption.
    */
+  /*
+  2. KeyValue内部格式
+
+  KeyValue内部格式可以分成三部份: 头、Key、Value，如表2.1所示
+  
+     名称　　　          字节数                  说明
+  --------------------------------------------------------------------
+  keyLength　　                         4                     表示Key所占的总字节数
+  valueLength           4                     表示Value所占的总字节数
+
+  rowKeyLength          2                     表示rowKey所占的字节数
+  rowKey                rowKeyLength          rowKey
+  columnFamilyLength    1                     表示列族名称所占的字节数
+  columnFamily          columnFamilyLength    列族名称
+  columnName            columnNameLength      列名
+  timestamp             8                     时间戳
+  type                  1                     Key类型，比如是新增(Put)，还是删除(Delete)
+
+  value                 valueLength           列值
+  --------------------------------------------------------------------
+                        表2.1
+  */
+  //调用match前已调用过setRow，而setRow用来指定当前要比较的rowKey，用来判断是否要转到下一行
   public MatchCode match(KeyValue kv) throws IOException {
-    if (filter != null && filter.filterAllRemaining()) {
+    if (filter != null && filter.filterAllRemaining()) { //是否过滤掉剩下的kv
       return MatchCode.DONE_SCAN;
     }
 
+    //看懂下面这些代码需要先了解KeyValue的格式
     byte [] bytes = kv.getBuffer();
     int offset = kv.getOffset();
 
@@ -228,9 +252,13 @@ public class ScanQueryMatcher {
     short rowLength = Bytes.toShort(bytes, offset, Bytes.SIZEOF_SHORT);
     offset += Bytes.SIZEOF_SHORT;
 
+    //比较rowKey
     int ret = this.rowComparator.compareRows(row, this.rowOffset, this.rowLength,
         bytes, offset, rowLength);
     if (ret <= -1) {
+      //说明前面的行对应的kv都取完了，转到新的rowKey，
+      //MatchCode.DONE只是代表当前行结束，后面还有记录，
+      //所以StoreScanner.next(List<KeyValue>, int, String)对于MatchCode.DONE的情况返回true
       return MatchCode.DONE;
     } else if (ret >= 1) {
       // could optimize this, if necessary?
@@ -243,6 +271,7 @@ public class ScanQueryMatcher {
     if (this.stickyNextRow)
         return MatchCode.SEEK_NEXT_ROW;
 
+    //scan时指定了列名，如果为true，说明想取的列都取完了
     if (this.columns.done()) {
       stickyNextRow = true;
       return MatchCode.SEEK_NEXT_ROW;
@@ -335,9 +364,9 @@ public class ScanQueryMatcher {
     }
 
     int timestampComparison = tr.compare(timestamp);
-    if (timestampComparison >= 1) {
+    if (timestampComparison >= 1) { //当前kv的timestamp >= tr.maxStamp，那么就直接跳过
       return MatchCode.SKIP;
-    } else if (timestampComparison <= -1) {
+    } else if (timestampComparison <= -1) { //当前kv的timestamp < tr.minStamp，那么取下一列或下一行
       return columns.getNextRowOrNextColumn(bytes, offset, qualLength);
     }
 
@@ -359,7 +388,7 @@ public class ScanQueryMatcher {
           return MatchCode.SEEK_NEXT_ROW;
         case SEEK_NEXT_USING_HINT:
           return MatchCode.SEEK_NEXT_USING_HINT;
-        default:
+        default: //除了上面4个ReturnCode，还有INCLUDE、INCLUDE_AND_NEXT_COL
           //It means it is either include or include and seek next
           break;
         }

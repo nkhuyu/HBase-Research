@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 /**
  * Keeps track of the columns for a scan if they are not explicitly specified
  */
+//如果scan时没指定列，那么就对应这个类
 public class ScanWildcardColumnTracker implements ColumnTracker {
   private byte [] columnBuffer = null;
   private int columnOffset = 0;
@@ -194,6 +195,7 @@ public class ScanWildcardColumnTracker implements ColumnTracker {
     return false;
   }
 
+  //参数是字段名
   public MatchCode getNextRowOrNextColumn(byte[] bytes, int offset,
       int qualLength) {
     return MatchCode.SEEK_NEXT_COL;

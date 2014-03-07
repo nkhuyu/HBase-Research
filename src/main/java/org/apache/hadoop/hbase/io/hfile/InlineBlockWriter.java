@@ -27,6 +27,7 @@ import java.io.IOException;
  * interspersed with data blocks. For example, Bloom filter chunks and
  * leaf-level blocks of a multi-level block index are stored as inline blocks.
  */
+//用于写Bloom块和叶子索引块
 public interface InlineBlockWriter {
 
   /**

@@ -733,6 +733,9 @@ implements WritableComparable<HRegionInfo> {
     // because freaks out if its not the current classes' version.  This method
     // can deserialize version 0 and version 1 of HRI.
     byte version = in.readByte();
+
+    //这段代码看org.apache.hadoop.hbase.migration.HRegionInfo090x.write类就比较好理解了
+    //先看它怎么写，然后看它怎么读才容易理解代码
     if (version == 0) {
       // This is the old HRI that carried an HTD.  Migrate it.  The below
       // was copied from the old 0.90 HRI readFields.

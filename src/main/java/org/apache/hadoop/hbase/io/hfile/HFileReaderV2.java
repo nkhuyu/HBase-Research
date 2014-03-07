@@ -106,6 +106,10 @@ public class HFileReaderV2 extends AbstractHFileReader {
           closeIStream, cacheConf, hfs);
     trailer.expectMajorVersion(2);
     validateMinorVersion(path, trailer.getMinorVersion());
+    
+    ///////////////////////下面的代码解析load-on-open这一部份的内容，有关load-on-open参考hfile-v2的架构图///////////////////////
+
+    //由fsBlockReaderV2读数据块字节流
     HFileBlock.FSReaderV2 fsBlockReaderV2 = new HFileBlock.FSReaderV2(fsdis,
         fsdisNoFsChecksum,
         compressAlgo, fileSize, trailer.getMinorVersion(), hfs, path);
@@ -113,29 +117,42 @@ public class HFileReaderV2 extends AbstractHFileReader {
 
     // Comparator class name is stored in the trailer in version 2.
     comparator = trailer.createComparator();
+    
+    //BlockIndexReader负责解析HFileBlock.FSReaderV2读回来的字节。
+    //trailer.getNumDataIndexLevels()是索引树的深度，有多少层?(不含数据块层)
     dataBlockIndexReader = new HFileBlockIndex.BlockIndexReader(comparator,
         trailer.getNumDataIndexLevels(), this);
+    
+    //只负责读Meta Index，参考hfile-v2的架构图
     metaBlockIndexReader = new HFileBlockIndex.BlockIndexReader(
         Bytes.BYTES_RAWCOMPARATOR, 1);
 
     // Parse load-on-open data.
-
+    //getLoadOnOpenDataOffset是root索引块在hfile中的相对位置，
+    //trailer.getTrailerSize()是trailer块在hfile中的相对位置，
+    //这个blockIter可以返回root data index和Meta index、File Info、Bloom filter metadata
     HFileBlock.BlockIterator blockIter = fsBlockReaderV2.blockRange(
         trailer.getLoadOnOpenDataOffset(),
         fileSize - trailer.getTrailerSize());
 
     // Data index. We also read statistics about the block index written after
     // the root level.
+    //trailer.getDataIndexCount()是root索引块中的entry个数
+    //这行代码是把root索引块读出来，然后把root索引块中的entry放到dataBlockIndexReader
+    //的blockOffsets、blockKeys、blockDataSizes，如果有MID_KEY，则
+    //读出MID_KEY相关的数据放到midLeafBlockOffset、midLeafBlockOnDiskSize、midKeyEntry
     dataBlockIndexReader.readMultiLevelIndexRoot(
         blockIter.nextBlockWithBlockType(BlockType.ROOT_INDEX),
         trailer.getDataIndexCount());
 
     // Meta index.
+    //读meta索引块中的entry个数，跟readMultiLevelIndexRoot有点类似，但是没有MID_KEY
     metaBlockIndexReader.readRootIndex(
         blockIter.nextBlockWithBlockType(BlockType.ROOT_INDEX),
         trailer.getMetaIndexCount());
 
     // File info
+    //读File Info块中的entry个数，没有MID_KEY
     fileInfo = new FileInfo();
     fileInfo.readFields(blockIter.nextBlockWithBlockType(BlockType.FILE_INFO).getByteStream());
     lastKey = fileInfo.get(FileInfo.LASTKEY);
@@ -158,6 +175,7 @@ public class HFileReaderV2 extends AbstractHFileReader {
 
     // Store all other load-on-open blocks for further consumption.
     HFileBlock b;
+    //这里读的是Bloom filter metadata
     while ((b = blockIter.nextBlock()) != null) {
       loadOnOpenBlocks.add(b);
     }
