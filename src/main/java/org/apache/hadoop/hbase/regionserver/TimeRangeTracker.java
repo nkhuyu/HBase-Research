@@ -95,7 +95,7 @@ public class TimeRangeTracker implements Writable {
    * If required, update the current TimestampRange to include timestamp
    * @param timestamp the timestamp value to include
    */
-  private void includeTimestamp(final long timestamp) {
+  private synchronized void includeTimestamp(final long timestamp) {
     if (maximumTimestamp == -1) {
       minimumTimestamp = timestamp;
       maximumTimestamp = timestamp;
@@ -114,7 +114,7 @@ public class TimeRangeTracker implements Writable {
    * @param tr TimeRange
    * @return True if there is overlap, false otherwise
    */
-  public boolean includesTimeRange(final TimeRange tr) { //两个范围有交集就可以了
+  public synchronized boolean includesTimeRange(final TimeRange tr) { //两个范围有交集就可以了
     return (this.minimumTimestamp < tr.getMax() &&
         this.maximumTimestamp >= tr.getMin());
   }
@@ -122,29 +122,29 @@ public class TimeRangeTracker implements Writable {
   /**
    * @return the minimumTimestamp
    */
-  public long getMinimumTimestamp() {
+  public synchronized long getMinimumTimestamp() {
     return minimumTimestamp;
   }
 
   /**
    * @return the maximumTimestamp
    */
-  public long getMaximumTimestamp() {
+  public synchronized long getMaximumTimestamp() {
     return maximumTimestamp;
   }
 
-  public void write(final DataOutput out) throws IOException {
+  public synchronized void write(final DataOutput out) throws IOException {
     out.writeLong(minimumTimestamp);
     out.writeLong(maximumTimestamp);
   }
 
-  public void readFields(final DataInput in) throws IOException {
+  public synchronized void readFields(final DataInput in) throws IOException {
     this.minimumTimestamp = in.readLong();
     this.maximumTimestamp = in.readLong();
   }
 
   @Override
-  public String toString() {
+  public synchronized String toString() {
     return "[" + minimumTimestamp + "," + maximumTimestamp + "]";
   }
 
