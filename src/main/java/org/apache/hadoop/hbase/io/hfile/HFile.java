@@ -411,7 +411,7 @@ public class HFile {
     public Writer create() throws IOException {
       if ((path != null ? 1 : 0) + (ostream != null ? 1 : 0) != 1) {
         throw new AssertionError("Please specify exactly one of " +
-            "filesystem/path or path");
+            "filesystem/path or path"); //"filesystem/path or path"里头最后的path应该是ostream
       }
       if (path != null) {
         ostream = AbstractHFileWriter.createOutputStream(conf, fs, path);
@@ -454,6 +454,7 @@ public class HFile {
    */
   public static final WriterFactory getWriterFactory(Configuration conf,
       CacheConfig cacheConf) {
+    //这段代码不是必需的，在HFileWriterV1和HFileWriterV2的构造函数中都有调用
     SchemaMetrics.configureGlobally(conf);
     int version = getFormatVersion(conf);
     switch (version) {
@@ -462,6 +463,8 @@ public class HFile {
     case 2:
       return new HFileWriterV2.WriterFactoryV2(conf, cacheConf);
     default:
+      //实际上不会发生，因为目前只有1和2，getFormatVersion调用了checkFormatVersion，在checkFormatVersion里已检查过一次，
+      //不过加上这个default只是为了保险起见，未来有可有加入新的版本，但是没提供新的HFileWriter
       throw new IllegalArgumentException("Cannot create writer for HFile " +
           "format version " + version);
     }

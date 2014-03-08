@@ -83,11 +83,12 @@ public class StoreScanner extends NonLazyKeyValueScanner
       final NavigableSet<byte[]> columns, long ttl, int minVersions) {
     this.store = store;
     this.cacheBlocks = cacheBlocks;
-    isGet = scan.isGetScan();
+    isGet = scan.isGetScan(); //startRow不是空且startRow与stopRow相等时
     int numCol = columns == null ? 0 : columns.size();
     explicitColumnQuery = numCol > 0;
     this.scan = scan;
     this.columns = columns;
+    //最老的未过期的时间戳，从当前时间回退ttl毫秒
     oldestUnexpiredTS = EnvironmentEdgeManager.currentTimeMillis() - ttl;
     this.minVersions = minVersions;
 
@@ -95,6 +96,7 @@ public class StoreScanner extends NonLazyKeyValueScanner
     // the seek operation. However, we also look the row-column Bloom filter
     // for multi-row (non-"get") scans because this is not done in
     // StoreFile.passesBloomFilter(Scan, SortedSet<byte[]>).
+    //对于ROWCOL类型的get只有一列时，在StoreFile.passesBloomFilter中用过了，所以无需再用
     useRowColBloom = numCol > 1 || (!isGet && numCol == 1);
     this.scanUsePread = scan.isSmall();
   }
@@ -118,10 +120,10 @@ public class StoreScanner extends NonLazyKeyValueScanner
           "Cannot specify any column for a raw scan");
     }
     matcher = new ScanQueryMatcher(scan, scanInfo, columns,
-        ScanType.USER_SCAN, Long.MAX_VALUE, HConstants.LATEST_TIMESTAMP,
+        ScanType.USER_SCAN, Long.MAX_VALUE, HConstants.LATEST_TIMESTAMP, //HConstants.LATEST_TIMESTAMP也是Long.MAX_VALUE
         oldestUnexpiredTS);
     // Pass columns to try to filter out unnecessary StoreFiles.
-    List<KeyValueScanner> scanners = getScannersNoCompaction();
+    List<KeyValueScanner> scanners = getScannersNoCompaction(); //在这一步里已用了bloom filter了
     // Seek all scanners to the start of the Row (or if the exact matching row
     // key does not exist, then to the start of the next matching Row).
     // Always check bloom filter to optimize the top row seek for delete
@@ -211,6 +213,7 @@ public class StoreScanner extends NonLazyKeyValueScanner
       tableName = store.getTableName();
       family = Bytes.toString(store.getFamily().getName());
     }
+    //如: "tbl.mytest.cf.cf1."
     this.metricNamePrefix =
         SchemaMetrics.generateSchemaMetricsPrefix(tableName, family);
   }
@@ -258,6 +261,10 @@ public class StoreScanner extends NonLazyKeyValueScanner
         continue;
       }
 
+      //shouldUseScanner只是针对get(或startRow和stopRow相同的scan)，
+      //看看是否有bloom filter，有的话就提前过滤掉无用的storeFile，
+      //对于startRow和stopRow不相同的scan，不管要scan的kv有没有在某个storeFile中都假定它是包含这些kv的，
+      //如是有bloom filter的话，就在StoreFileScanner.requestSeek(KeyValue, boolean, boolean)那里再进行过滤
       if (kvs.shouldUseScanner(scan, columns, expiredTimestampCutoff)) {
         scanners.add(kvs);
       }

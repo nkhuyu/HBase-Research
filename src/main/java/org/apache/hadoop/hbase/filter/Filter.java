@@ -149,7 +149,7 @@ public interface Filter extends Writable {
    * Primarily used to check for conflicts with scans(such as scans
    * that do not read a full row at a time)
    */
-  public boolean hasFilterRow();
+  public boolean hasFilterRow(); //只有DependentColumnFilter和SingleColumnValueExcludeFilter返回true，其他为false
 
   /**
    * Last chance to veto row based on previous {@link #filterKeyValue(KeyValue)}

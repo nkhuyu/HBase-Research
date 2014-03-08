@@ -24,6 +24,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import my.test.TestBase;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -38,7 +40,18 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.catalog.CatalogTracker;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Durability;
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.IsolationLevel;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.BinaryComparator;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.RowFilter;
+import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.io.hfile.Compression;
 import org.apache.hadoop.hbase.ipc.RpcServer;
@@ -46,8 +59,10 @@ import org.apache.hadoop.hbase.regionserver.CompactionRequestor;
 import org.apache.hadoop.hbase.regionserver.FlushRequester;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.Leases;
+import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.RegionServerAccounting;
 import org.apache.hadoop.hbase.regionserver.RegionServerServices;
+import org.apache.hadoop.hbase.regionserver.StoreFile;
 import org.apache.hadoop.hbase.regionserver.wal.HLog;
 import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
 import org.apache.hadoop.hbase.regionserver.wal.WALActionsListener;
@@ -58,7 +73,7 @@ import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
 import org.apache.zookeeper.KeeperException;
 
-public class HRegionTest {
+public class HRegionTest extends TestBase {
 
     public static void main(String[] args) throws Exception {
         new HRegionTest().run();
@@ -66,10 +81,33 @@ public class HRegionTest {
 
     Configuration conf = HBaseConfiguration.create();
     String tableName = "mytest";
+    HRegionInfo ri = new HRegionInfo(toB(tableName), toB("10000"), toB("99999"), true, 1000);
 
     void run() throws Exception {
         //testHRegionInfo();
         testHRegion();
+    }
+
+    void testHRegion() throws Exception {
+
+        //deleteRootDir();
+
+        //createHRegion();
+        //openHRegion();
+        //flushcache();
+        //testHLog();
+
+        //        testPut(10000, 30000, 50000);
+        //        testPut(20000, 40000, 60000);
+
+        //test_doMiniBatchPut();
+
+        //testGet();
+
+        testScan();
+
+        //conf.set("hbase.hstore.compaction.min.size", "110");
+        //compactStores();
     }
 
     void testHRegionInfo() throws Exception {
@@ -80,7 +118,7 @@ public class HRegionTest {
 
         HRegionInfo ri = new HRegionInfo(toB("tableName"), toB("startKey"), toB("endKey"), true, 1000);
 
-        System.out.println(ri);
+        System.out.println();
         System.out.println(ri.getEncodedName());
 
         String regionName = "tableName,startKey,1000.acb7ac0a5959190a3d597b30b7dbba4b.";
@@ -97,20 +135,6 @@ public class HRegionTest {
         //System.out.println(ri.getTableDesc());
     }
 
-    void testHRegion() throws Exception {
-
-        HRegionInfo ri = new HRegionInfo(toB(tableName), toB("10000"), toB("99999"), true, 1000);
-
-        //deleteRootDir();
-
-        //createHRegion(ri);
-        //openHRegion(ri);
-        flushcache(ri);
-        //testHLog();
-
-        //test_doMiniBatchPut(ri);
-    }
-
     void deleteRootDir() throws Exception {
         System.out.println("deleteRootDir: " + getRootDir());
         FileSystem fs = FileSystem.get(conf);
@@ -122,8 +146,16 @@ public class HRegionTest {
         return rootdir;
     }
 
+    void compactStores(HRegionInfo ri) throws Exception {
+        HRegion region = getHRegion();
+        //region.compactStores();
+        region.compactStores(true);
+    }
+
     HTableDescriptor getHTableDescriptor() {
-        String[] familyNames = { "cf1", "cf2" };
+        //String[] familyNames = { "cf1", "cf2" };
+
+        String[] familyNames = { "cf1" };
 
         HTableDescriptor htd = new HTableDescriptor(tableName);
         htd.setMemStoreFlushSize(512 * 1024 * 1024);
@@ -131,7 +163,9 @@ public class HRegionTest {
         for (String familyName : familyNames) {
             HColumnDescriptor hcd = new HColumnDescriptor(familyName);
             hcd.setCompressionType(Compression.Algorithm.GZ);
-            hcd.setDataBlockEncoding(DataBlockEncoding.FAST_DIFF);
+            //hcd.setBloomFilterType(StoreFile.BloomType.ROW);
+            hcd.setBloomFilterType(StoreFile.BloomType.ROWCOL);
+            //hcd.setDataBlockEncoding(DataBlockEncoding.FAST_DIFF);
             htd.addFamily(hcd);
         }
 
@@ -154,12 +188,12 @@ public class HRegionTest {
         List<WALActionsListener> listeners = new ArrayList<WALActionsListener>();
         listeners.add(new MyWALActionsListener());
         HLog hlog = new HLog(getFileSystem(), new Path(regionDir, HConstants.HREGION_LOGDIR_NAME), new Path(regionDir,
-                HConstants.HREGION_OLDLOGDIR_NAME), conf, listeners, true, "myhlog", false);
+                HConstants.HREGION_OLDLOGDIR_NAME), conf, listeners, false, "myhlog", false);
 
         return hlog;
     }
 
-    void createHRegion(HRegionInfo ri) throws Exception {
+    void createHRegion() throws Exception {
         HRegion region = null;
         //region = HRegion.createHRegion(ri, getRootDir(), conf, getHTableDescriptor());
         region = HRegion.createHRegion(ri, getRootDir(), conf, getHTableDescriptor(), getHLog());
@@ -168,7 +202,7 @@ public class HRegionTest {
 
     int ttl = 10; //10妙
 
-    void test_doMiniBatchPut(HRegionInfo ri) throws Exception {
+    void test_doMiniBatchPut() throws Exception {
         HRegion region = null;
         HTableDescriptor htd = getHTableDescriptor();
         //for (HColumnDescriptor hcd : htd.getColumnFamilies())
@@ -207,40 +241,149 @@ public class HRegionTest {
         region.close();
     }
 
-    @SuppressWarnings("deprecation")
-    void openHRegion(HRegionInfo ri) throws Exception {
+    void testGet() throws Exception {
+        HRegion region = getHRegion();
+        Get get = new Get(toB("10001"));
+
+        Result result = region.get(get);
+
+        p(result);
+    }
+
+    HRegion getHRegion() throws Exception {
         HRegion region = null;
         HTableDescriptor htd = getHTableDescriptor();
         //htd.setReadOnly(true);
         region = HRegion.openHRegion(ri, htd, null, conf, null, new MyCancelableProgressable());
-        System.out.println(region);
+        return region;
+    }
 
-        for (int i = 10000; i < 10003; i++) {
-            Put put = new Put(toB("" + i));
-            put.setWriteToWAL(false);
-            put.add(toB("cf1"), toB("c"), toB("myvalue"));
-            Integer lockid = region.obtainRowLock(put.getRow());
-            try {
-                region.put(put, lockid);
+    void testScan() throws Exception {
+        testPut(false, 70000, 80000);
+        HRegion region = getHRegion();
 
-                MyThread t = new MyThread();
-                t.region = region;
-                t.put = put;
-                t.lockid = lockid;
-                //t.start();
-            } finally {
-                if (lockid != null)
-                    region.releaseRowLock(lockid);
+        Delete d = new Delete(toB("20000"));
+        d.deleteColumn(toB("cf1"), toB("q2"));
+        //region.delete(d, false);
+
+        for (int i = 0; i < 1; i++) {
+            Scan scan = new Scan();
+            scan = new Scan(toB("30000"), toB("80001"));
+                        scan.addColumn(toB("cf1"), toB("q1"));
+                        scan.addColumn(toB("cf1"), toB("q2"));
+            //scan.addColumn(toB("cf1"), toB("q3"));
+            //scan.addColumn(toB("cf2"), toB("q2"));
+
+            Filter f = null;
+            f = new RowFilter(CompareOp.EQUAL, new BinaryComparator(toB("30000")));
+            //f = new SingleColumnValueFilter(toB("cf2"), toB("q2"), CompareOp.EQUAL, toB("myvalue1-30000"));
+            //((SingleColumnValueFilter)f).setFilterIfMissing(true);
+            scan.setFilter(f);
+
+            scan.setBatch(2);
+            scan.setLoadColumnFamiliesOnDemand(true);
+
+            //scan.setTimeRange(20003, 30001);
+
+            scan.setTimeRange(10000, 99999);
+
+            scan.setIsolationLevel(IsolationLevel.READ_UNCOMMITTED);
+
+            RegionScanner regionScanner = region.getScanner(scan);
+            List<KeyValue> results = new ArrayList<KeyValue>();
+            while (regionScanner.next(results) || !results.isEmpty()) {
+                p(results.size());
+                p(results);
+                p();
+                results.clear();
             }
-
+            regionScanner.close();
         }
-        region.flushcache();
+    }
 
+    HRegion openHRegion() throws Exception {
+        HRegion region = null;
+        HTableDescriptor htd = getHTableDescriptor();
+        //htd.setReadOnly(true);
+        region = HRegion.openHRegion(ri, htd, getHLog(), conf, null, new MyCancelableProgressable());
+
+        return region;
+    }
+
+    void testPut(boolean flush, int... keys) throws Exception {
+
+        HRegion region = openHRegion();
+        for (int key : keys) {
+            int i2 = key;
+            Put put = new Put(toB("" + i2));
+            put.setDurability(Durability.SYNC_WAL);
+            put.add(toB("cf1"), toB("q1"), i2, toB("myvalue1-" + i2));
+            put.add(toB("cf1"), toB("q2"), i2, toB("myvalue2-" + i2));
+            put.add(toB("cf1"), toB("q3"), i2, toB("myvalue2-" + i2));
+
+            put.add(toB("cf1"), toB("q1"), i2 + 1, toB("myvalue1-" + i2));
+            put.add(toB("cf1"), toB("q2"), i2 + 1, toB("myvalue2-" + i2));
+            put.add(toB("cf1"), toB("q3"), i2 + 1, toB("myvalue2-" + i2));
+
+            //                put.add(toB("cf2"), toB("q1"), i2, toB("myvalue1-" + i2));
+            //                put.add(toB("cf2"), toB("q2"), i2, toB("myvalue2-" + i2));
+            //                put.add(toB("cf2"), toB("q3"), i2, toB("myvalue2-" + i2));
+
+            region.put(put);
+        }
+        if (flush) {
+            region.flushcache();
+            region.close();
+        }
+    }
+
+    void testPut(int... keys) throws Exception {
+        testPut(true, keys);
+    }
+
+    @SuppressWarnings("deprecation")
+    void testPut() throws Exception {
+        HRegion region = openHRegion();
+
+        int count = 5;
+        for (int j = 0; j < count; j++) {
+            for (int i = 10000; i < 10003; i++) {
+                int i2 = j * 10000 + i;
+                Put put = new Put(toB("" + i2));
+                put.setWriteToWAL(true);
+                put.add(toB("cf1"), toB("q1"), i2, toB("myvalue1-" + i2));
+                put.add(toB("cf1"), toB("q2"), i2, toB("myvalue2-" + i2));
+                put.add(toB("cf1"), toB("q3"), i2, toB("myvalue2-" + i2));
+
+                put.add(toB("cf1"), toB("q1"), i2 + 1, toB("myvalue1-" + i2));
+                put.add(toB("cf1"), toB("q2"), i2 + 1, toB("myvalue2-" + i2));
+                put.add(toB("cf1"), toB("q3"), i2 + 1, toB("myvalue2-" + i2));
+
+                //                put.add(toB("cf2"), toB("q1"), i2, toB("myvalue1-" + i2));
+                //                put.add(toB("cf2"), toB("q2"), i2, toB("myvalue2-" + i2));
+                //                put.add(toB("cf2"), toB("q3"), i2, toB("myvalue2-" + i2));
+                Integer lockid = region.obtainRowLock(put.getRow());
+                try {
+                    region.put(put, lockid);
+
+                    MyThread t = new MyThread();
+                    t.region = region;
+                    t.put = put;
+                    t.lockid = lockid;
+                    //t.start();
+                } finally {
+                    if (lockid != null)
+                        region.releaseRowLock(lockid);
+                }
+
+            }
+            region.flushcache();
+        }
         region.close();
     }
 
     @SuppressWarnings("deprecation")
-    void flushcache(HRegionInfo ri) throws Exception {
+    void flushcache() throws Exception {
         HRegion region = null;
         HTableDescriptor htd = getHTableDescriptor();
         //htd.setReadOnly(true);
@@ -319,13 +462,13 @@ public class HRegionTest {
         //hlog.closeAndDelete();
     }
 
-    static byte[] toB(String str) {
-        return Bytes.toBytes(str);
-    }
-
-    static String toS(byte[] bytes) {
-        return Bytes.toString(bytes);
-    }
+    //    static byte[] toB(String str) {
+    //        return Bytes.toBytes(str);
+    //    }
+    //
+    //    static String toS(byte[] bytes) {
+    //        return Bytes.toString(bytes);
+    //    }
 
     static class MyCancelableProgressable implements CancelableProgressable {
 

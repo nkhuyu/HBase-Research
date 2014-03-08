@@ -488,6 +488,7 @@ public class ScanQueryMatcher {
           kv.getBuffer(), kv.getFamilyOffset(), kv.getFamilyLength(),
           kv.getBuffer(), kv.getQualifierOffset(), kv.getQualifierLength());
     } else {
+        //rowKey和列族名都保留，字段名用nextColumn里的
       return KeyValue.createFirstOnRow(
           kv.getBuffer(), kv.getRowOffset(), kv.getRowLength(),
           kv.getBuffer(), kv.getFamilyOffset(), kv.getFamilyLength(),

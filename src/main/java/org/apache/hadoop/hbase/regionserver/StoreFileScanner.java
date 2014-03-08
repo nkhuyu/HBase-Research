@@ -291,6 +291,7 @@ public class StoreFileScanner implements KeyValueScanner {
           kv.isDeleteFamily()) {
         // if there is no such delete family kv in the store file,
         // then no need to seek.
+        //相关代码参考StoreFile.Reader.passesGeneralBloomFilter方法中标注: "用于DeleteFamily" 的代码
         haveToSeek = reader.passesDeleteFamilyBloomFilter(kv.getBuffer(),
             kv.getRowOffset(), kv.getRowLength());
       }
@@ -305,7 +306,7 @@ public class StoreFileScanner implements KeyValueScanner {
       realSeekDone = false;
       long maxTimestampInFile = reader.getMaxTimestamp();
       long seekTimestamp = kv.getTimestamp();
-      if (seekTimestamp > maxTimestampInFile) {
+      if (seekTimestamp > maxTimestampInFile) { //kv的时间戳大于文件时间戳时，说明此kv不在这个文件中，建立一个假的kv
         // Create a fake key that is not greater than the real next key.
         // (Lower timestamps correspond to higher KVs.)
         // To understand this better, consider that we are asked to seek to

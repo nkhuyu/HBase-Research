@@ -70,17 +70,20 @@ public class HFileV2Test extends HFileTest {
         conf.set("hbase.data.umask", "122");
 
         conf.set(BloomFilterFactory.IO_STOREFILE_BLOOM_ERROR_RATE, "0.01");
-        conf.set(BloomFilterFactory.IO_STOREFILE_BLOOM_BLOCK_SIZE, (127 * 1024) + "");
-        conf.set(BloomFilterFactory.IO_STOREFILE_BLOOM_BLOCK_SIZE, (129 * 1024) + "");
+        //conf.set(BloomFilterFactory.IO_STOREFILE_BLOOM_BLOCK_SIZE, (127 * 1024) + "");
+        //conf.set(BloomFilterFactory.IO_STOREFILE_BLOOM_BLOCK_SIZE, (129 * 1024) + "");
 
         long size = 1 * 1024 * 1024;
         conf.set("fs.local.block.size", Long.toString(size));
+
+        //不使用块缓存
+        conf.set("hfile.block.cache.size", "0.0");
     }
 
     public void run() throws Exception {
         //write();
-        read();
-        //scan();
+        //read();
+        scan();
     }
 
     public void write() throws Exception {
@@ -108,8 +111,11 @@ public class HFileV2Test extends HFileTest {
         Compression.Algorithm arg = Compression.Algorithm.GZ;
         arg = Compression.Algorithm.NONE;
 
+        int blockSize = 1024;
+        blockSize = 256;
+
         //WriterFactory writerFactory = HFile.getWriterFactoryNoCache(conf);
-        writerFactory.withPath(fs, hfile).withBlockSize(1024).withCompression(arg);
+        writerFactory.withPath(fs, hfile).withBlockSize(blockSize).withCompression(arg);
         writerFactory.withDataBlockEncoder(encoder).withComparator(KeyValue.KEY_COMPARATOR);
 
         writerFactory.withBytesPerChecksum(100); //每100字节求校验和
@@ -182,10 +188,10 @@ public class HFileV2Test extends HFileTest {
             //writer.append(new KeyValue(Bytes.toBytes(getKeyStr(i-1)), family, qualifier, timestamp + i, valueBytes));
 
             generalBloomFilterWriter.add(kv.getBuffer(), kv.getOffset(), kv.getLength());
-            generalBloomFilterWriterROWCOL.add(kv.getBuffer(), kv.getOffset(), kv.getLength());
-            byteBloomFilter.add(kv.getBuffer(), kv.getOffset(), kv.getLength());
-            if (i == 100 || i == 200)
-                deleteBloomFilterWriter.add(kv.getBuffer(), kv.getOffset(), kv.getLength());
+            //            generalBloomFilterWriterROWCOL.add(kv.getBuffer(), kv.getOffset(), kv.getLength());
+            //            byteBloomFilter.add(kv.getBuffer(), kv.getOffset(), kv.getLength());
+            //            if (i == 100 || i == 200)
+            //                deleteBloomFilterWriter.add(kv.getBuffer(), kv.getOffset(), kv.getLength());
         }
         writer.addGeneralBloomFilter(byteBloomFilter);
         writer.addGeneralBloomFilter(generalBloomFilterWriter);

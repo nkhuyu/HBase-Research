@@ -19,8 +19,6 @@
  */
 package my.test.hfile;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -33,11 +31,8 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.io.hfile.Compression;
-import org.apache.hadoop.hbase.io.hfile.FixedFileTrailer;
 import org.apache.hadoop.hbase.io.hfile.HFile;
-import org.apache.hadoop.hbase.io.hfile.HFileBlockIndex;
 import org.apache.hadoop.hbase.io.hfile.HFileDataBlockEncoderImpl;
-import org.apache.hadoop.hbase.io.hfile.HFileScanner;
 import org.apache.hadoop.hbase.io.hfile.HFile.Writer;
 import org.apache.hadoop.hbase.io.hfile.HFile.WriterFactory;
 import org.apache.hadoop.hbase.regionserver.StoreFile;
@@ -60,9 +55,9 @@ public class HFileV1Test extends HFileTest {
     }
 
     public void run() throws Exception {
-        write();
+        //write();
         //read();
-        //scan();
+        scan();
     }
 
     public void write() throws Exception {
@@ -213,174 +208,5 @@ public class HFileV1Test extends HFileTest {
         //assertEquals(ENTRY_COUNT * (20 + 24), totalKeyLength + totalValueLength);
 
         writer.close();
-    }
-
-    public void read() throws Exception {
-        SchemaMetrics.configureGlobally(conf);
-        HFile.Reader reader = HFile.createReaderWithEncoding(fs, hfile, new CacheConfig(conf), DataBlockEncoding.PREFIX);
-
-        reader.loadFileInfo(); //要先调用loadFileInfo，之后才能取到值，比如reader.getComparator()如果没有调用loadFileInfo就是null
-
-        p(reader.getName());
-        p(reader.getColumnFamilyName());
-        p(reader.getComparator());
-
-        ByteBuffer byteBuffer = reader.getMetaBlock("CAPITAL_OF_USA", true);
-        p(toS(byteBuffer.array()));
-
-        p(toS(reader.getLastKey()));
-        p(toS(reader.midkey()));
-        p(reader.length());
-        p(reader.getEntries());
-        p(toS(reader.getFirstKey()));
-        p(reader.indexSize());
-
-        p(toS(reader.getFirstRowKey()));
-        p(toS(reader.getLastRowKey()));
-
-        p(reader.getTrailer());
-        p(reader.getDataBlockIndexReader());
-
-        p(reader.getScanner(true, true));
-
-        p(reader.getCompressionAlgorithm());
-        p(reader.getGeneralBloomFilterMetadata());
-        p(reader.getDeleteBloomFilterMetadata());
-
-        p(reader.getPath());
-        p(reader.getEncodingOnDisk());
-
-        FixedFileTrailer trailer = reader.getTrailer();
-
-        p("trailer.getMetaIndexCount()=" + trailer.getMetaIndexCount());
-
-        reader.close();
-        reader.close(true);
-    }
-
-    public void scan() throws IOException {
-        HFile.Reader reader = HFile.createReader(fs, hfile, new CacheConfig(conf));
-        SchemaMetrics.configureGlobally(conf);
-        reader.loadFileInfo();
-
-        FixedFileTrailer trailer = reader.getTrailer();
-
-        HFileBlockIndex.BlockIndexReader bir = reader.getDataBlockIndexReader();
-        //下面两者值是一样的
-        p(bir.getRootBlockCount());
-        p(trailer.getDataIndexCount());
-
-        p(trailer.getEntryCount());
-
-        /*总共99个KeyValue，生成15个数据块，每个数据块放7个KeyValue
-         	001
-        	008
-        	015
-        	022
-        	029
-        	036
-        	043
-        	050
-        	057
-        	064
-        	071
-        	078
-        	085
-        	092
-        	099
-         */
-        String rowKey;
-        for (int i = 0, count = bir.getRootBlockCount(); i < count; i++) {
-            //只建立KeyValue中的Key，并生成rowKey
-            rowKey = toS(KeyValue.createKeyValueFromKey(bir.getRootBlockKey(i)).getRow());
-            rowKey = rowKey.substring(rowKey.length() - 3);
-            //p(rowKey);
-
-            p(toS((bir.getRootBlockKey(i))));
-        }
-
-        p();
-
-        boolean cacheBlocks = true;
-        boolean pread = true;
-        boolean isCompaction = true;
-        HFileScanner scanner = reader.getScanner(cacheBlocks, pread, isCompaction);
-
-        byte[] key = Bytes.toBytes(getKeyStr(3));
-        key = Bytes.toBytes(getKeyStr(8189));
-        key = Bytes.toBytes(getKeyStr(2050));
-        key = Bytes.toBytes(getKeyStr(2040));
-        key = Bytes.toBytes(getKeyStr(112040));
-        key = Bytes.toBytes(getKeyStr(2058));
-        key = Bytes.toBytes(getKeyStr(6154));
-
-        key = Bytes.toBytes(getKeyStr(0));
-        key = Bytes.toBytes(getKeyStr(8));
-        key = Bytes.toBytes(getKeyStr(15));
-        key = Bytes.toBytes(getKeyStr(16));
-
-        key = Bytes.toBytes(getKeyStr(18));
-
-        key = Bytes.toBytes(getKeyStr(615400));
-        key = Bytes.toBytes(getKeyStr(2));
-
-        key = Bytes.toBytes(getKeyStr(4));
-
-        //key = Bytes.toBytes(getKeyStr(0));
-
-        byte[] reseekKey = Bytes.toBytes(getKeyStr(17));
-        KeyValue reseekKV = new KeyValue(reseekKey, family, qualifier, 0L, (byte[]) null);
-
-        byte[] key2 = new KeyValue(Bytes.toBytes(getKeyStr(16)), family, qualifier, 0L, (byte[]) null).getKey();
-
-        KeyValue kv = new KeyValue(key, family, qualifier, 0L, (byte[]) null);
-        //key = kv.getRow();
-        //key = Bytes.toBytes(getKeyStr(9));
-
-        key = kv.getKey();
-
-        //scanner.seekTo();
-        //scanner.seekTo();
-        //scanner.seekTo(key);
-        //scanner.seekBefore(key);
-
-        scanner.seekTo(key);
-        scanner.seekTo(key);
-        //如果当前Key>=reseekKey，那么什么都不做，
-        //换句话说，scanner只能一直往前，不能倒退
-        scanner.reseekTo(reseekKV.getKey());
-
-        scanner.seekTo(key2);
-        scanner.reseekTo(reseekKV.getKey());
-
-        do {
-            kv = scanner.getKeyValue();
-            p(toS(kv.getKey()));
-            //System.out.println(": " + scanner.getValueString());
-        } while (scanner.next());
-
-        //EncodedDataBlock e = new EncodedDataBlock(DataBlockEncoding.PREFIX.getEncoder(), true);
-        //		EncodedDataBlock e = new EncodedDataBlock(DataBlockEncoding.DIFF.getEncoder(), true);
-        //
-        //		int count = 0;
-        //		//这种方式会丢失第一个KeyValue，因为next会把内部buffer的位置移动到下一个KeyValue的位置
-        //		//所以要使用do while循环
-        //		while (scanner.next()) {
-        //			kv = scanner.getKeyValue();
-        //			e.addKv(kv);
-        //			System.out.print(scanner.getKeyString().substring(99));
-        //			System.out.println(": " + scanner.getValueString());
-        //
-        //			count++;
-        //			if (count > 100)
-        //				break;
-        //		}
-        //		Iterator<KeyValue> iterator = e.getIterator();
-        //		while (iterator.hasNext()) {
-        //			kv = iterator.next();
-        //			System.out.print(Bytes.toString(kv.getRow()).substring(99));
-        //			System.out.println(": " + Bytes.toString(kv.getValue()));
-        //
-        //		}
     }
 }

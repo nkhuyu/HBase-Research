@@ -89,7 +89,7 @@ public class Scan extends OperationWithAttributes implements Writable {
   private byte [] startRow = HConstants.EMPTY_START_ROW;
   private byte [] stopRow  = HConstants.EMPTY_END_ROW;
   private int maxVersions = 1;
-  private int batch = -1;
+  private int batch = -1; //不是指行数，而是限制同一个rowKey中的KeyValue个数
   // If application wants to collect scan metrics, it needs to
   // call scan.setAttribute(SCAN_ATTRIBUTES_ENABLE, Bytes.toBytes(Boolean.TRUE))
   static public String SCAN_ATTRIBUTES_METRICS_ENABLE = "scan.attributes.metrics.enable";

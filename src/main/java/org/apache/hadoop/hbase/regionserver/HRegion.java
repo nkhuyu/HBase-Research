@@ -349,6 +349,9 @@ public class HRegion implements HeapSize { // , Writable{
   private long flushCheckInterval;
   private long blockingMemStoreSize;
   final long threadWakeFrequency;
+  
+  //要注意lock和updatesLock用途不一样，startRegionOperation方法中用的是lock.readLock()
+  //而startRegionOperation在get和put时都调用
   // Used to guard closes
   final ReentrantReadWriteLock lock =
     new ReentrantReadWriteLock();
@@ -1810,7 +1813,7 @@ public class HRegion implements HeapSize { // , Writable{
   }
 
   void prepareScanner(Scan scan) throws IOException {
-    if(!scan.hasFamilies()) {
+    if(!scan.hasFamilies()) { //Scan未指定列族时把表的所有列族都加上
       // Adding all families to scanner
       for(byte[] family: this.htableDescriptor.getFamiliesKeys()){
         scan.addFamily(family);
@@ -3831,12 +3834,14 @@ public class HRegion implements HeapSize { // , Writable{
       }
       // If we are doing a get, we want to be [startRow,endRow] normally
       // it is [startRow,endRow) and if startRow=endRow we get nothing.
-      this.isScan = scan.isGetScan() ? -1 : 0;
+      this.isScan = scan.isGetScan() ? -1 : 0; //startRow和stopRow相等时就把scan当成get
 
       // synchronize on scannerReadPoints so that nobody calculates
       // getSmallestReadPoint, before scannerReadPoints is updated.
       IsolationLevel isolationLevel = scan.getIsolationLevel();
       synchronized(scannerReadPoints) {
+        //如果是READ_COMMITTED那么先得到一个ReadPoint，这样在scan过程中发现比这个ReadPoint新的都不读
+        //如果是READ_UNCOMMITTED，ReadPoint变成Long.MAX_VALUE，所有新加入的KV的时间戳都小于等于它，scan过程中都读得到
         if (isolationLevel == IsolationLevel.READ_UNCOMMITTED) {
           // This scan can read even uncommitted transactions
           this.readPt = Long.MAX_VALUE;
@@ -3855,12 +3860,14 @@ public class HRegion implements HeapSize { // , Writable{
         scanners.addAll(additionalScanners);
       }
 
+      //scan中的列族->此列族要scan的列
       for (Map.Entry<byte[], NavigableSet<byte[]>> entry :
           scan.getFamilyMap().entrySet()) {
         Store store = stores.get(entry.getKey());
+        //获得一个StoreScanner，并且StoreScanner中的Scanner都会预先按scan的StartKey进行seek或requestSeek
         KeyValueScanner scanner = store.getScanner(scan, entry.getValue());
         if (this.filter == null || !scan.doLoadColumnFamiliesOnDemand()
-          || FilterBase.isFamilyEssential(this.filter, entry.getKey())) {
+          || FilterBase.isFamilyEssential(this.filter, entry.getKey())) { //只有SingleColumnValueFilter.isFamilyEssential有用
           scanners.add(scanner);
         } else {
           joinedScanners.add(scanner);
@@ -3888,7 +3895,9 @@ public class HRegion implements HeapSize { // , Writable{
         filter.reset();
       }
     }
-
+    
+    //下面的next方法每次读一行，得到的KeyValue放到outResults中，limit用于限制返回的KeyValue个数
+    //next方法的返回值如果为true说明后面还有记录，否则结束
     @Override
     public boolean next(List<KeyValue> outResults, int limit)
         throws IOException {
@@ -3917,6 +3926,8 @@ public class HRegion implements HeapSize { // , Writable{
       }
     }
 
+    //nextRaw不会涉及计数、度量、MVCC ReadPoint
+    //而上面的next需要，next还是要调用nextRaw 
     @Override
     public boolean nextRaw(List<KeyValue> outResults, String metric)
         throws IOException {
@@ -4044,10 +4055,10 @@ public class HRegion implements HeapSize { // , Writable{
         if (joinedContinuationRow == null) {
           // First, check if we are at a stop row. If so, there are no more results.
           if (stopRow) {
-            if (filter != null && filter.hasFilterRow()) {
+            if (filter != null && filter.hasFilterRow()) { //是否需要对行记录中的kv进行过滤
               filter.filterRow(results);
             }
-            if (filter != null && filter.filterRow()) {
+            if (filter != null && filter.filterRow()) { //是否过滤掉整行
               results.clear();
             }
             return false;
@@ -4055,17 +4066,19 @@ public class HRegion implements HeapSize { // , Writable{
 
           // Check if rowkey filter wants to exclude this row. If so, loop to next.
           // Techically, if we hit limits before on this row, we don't need this call.
-          if (filterRowKey(currentRow, offset, length)) {
+          if (filterRowKey(currentRow, offset, length)) { //按rowKey过滤掉整行
             results.clear();
-            boolean moreRows = nextRow(currentRow, offset, length);
+            boolean moreRows = nextRow(currentRow, offset, length); //会跳过与currentRow相同的KV
             if (!moreRows) return false;
             continue;
           }
 
           // Ok, we are good, let's try to get some results from the main heap.
+          //读出来与currentRow相同的所有KV放到results中
           KeyValue nextKv = populateResult(results, this.storeHeap, limit, currentRow, offset,
               length, metric);
           if (nextKv == KV_LIMIT) {
+            //scan.setBatch不能和需要过滤行记录的filter同时用
             if (this.filter != null && filter.hasFilterRow()) {
               throw new IncompatibleFilterException(
                 "Filter whose hasFilterRow() returns true is incompatible with scan with limit!");
@@ -4083,7 +4096,7 @@ public class HRegion implements HeapSize { // , Writable{
             filter.filterRow(results);
           }
 
-          if (isEmptyRow || filterRow()) {
+          if (isEmptyRow || filterRow()) { //是否过滤掉整行
             results.clear();
             boolean moreRows = nextRow(currentRow, offset, length);
             if (!moreRows) return false;
@@ -4161,6 +4174,9 @@ public class HRegion implements HeapSize { // , Writable{
     }
 
     private boolean isStopRow(byte [] currentRow, int offset, short length) {
+      //如果scan的startRow和stopRow一样，那么就认为是get，包含stopRow的值，
+      //在此类的构造中isScan的值为-1，
+      //否则就是正常的scan，isScan的值为0，
       return currentRow == null ||
           (stopRow != null &&
           comparator.compareRows(stopRow, 0, stopRow.length,

@@ -1,0 +1,17 @@
+相关类和接口都在org.apache.hadoop.hbase.util
+BloomFilter接口用于读，判断给定的key是否包含
+BloomFilterWriter接口用于写
+
+ByteBloomFilter类同时实现了这两个接口
+
+而CompoundXXX就分开
+
+CompoundBloomFilter用于读
+CompoundBloomFilterWriter用于写
+这两类内部还是委托给ByteBloomFilter
+
+CompoundBloomFilter、CompoundBloomFilterWriter只有hfile v2才支持
+
+BLOOM_BLOCK_SIZE默认是128K
+
+

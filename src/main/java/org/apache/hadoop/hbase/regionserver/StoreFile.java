@@ -1643,7 +1643,7 @@ public class StoreFile extends SchemaConfigured {
             } else {
               exists =
                   bloomFilter.contains(key, 0, key.length, bloom) ||
-                  bloomFilter.contains(rowBloomKey, 0, rowBloomKey.length,
+                  bloomFilter.contains(rowBloomKey, 0, rowBloomKey.length, //用于DeleteFamily
                       bloom);
             }
           } else {
